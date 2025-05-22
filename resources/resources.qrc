@@ -1,0 +1,32 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+
+	<qresource prefix="icons">
+		<file alias="dark/circle-filled">icons/dark/circle-filled.svg</file>
+		<file alias="dark/circle-line">icons/dark/circle-line.svg</file>
+		<file alias="dark/circle-parent">icons/dark/circle-parent.svg</file>
+		<file alias="dark/clear-all">icons/dark/clear-all.svg</file>
+		<file alias="dark/database">icons/dark/database.svg</file>
+		<file alias="dark/debug">icons/dark/debug.svg</file>
+		<file alias="dark/delete">icons/dark/delete.svg</file>
+		<file alias="dark/download">icons/dark/download.svg</file>
+		<file alias="dark/expand_all">icons/dark/expand_all.svg</file>
+		<file alias="dark/help">icons/dark/help.svg</file>
+		<file alias="dark/info">icons/dark/info.svg</file>
+		<file alias="dark/layout">icons/dark/layout.svg</file>
+		<file alias="dark/refresh">icons/dark/refresh.svg</file>
+		<file alias="dark/run-all">icons/dark/run-all.svg</file>
+		<file alias="dark/save">icons/dark/save.svg</file>
+		<file alias="dark/search">icons/dark/search.svg</file>
+		<file alias="dark/settings-gear">icons/dark/settings-gear.svg</file>
+		<file alias="dark/start">icons/dark/start.svg</file>
+		<file alias="dark/tasklist">icons/dark/tasklist.svg</file>
+		<file alias="dark/trash">icons/dark/trash.svg</file>
+		<file alias="dark/word-wrap">icons/dark/word-wrap.svg</file>
+	</qresource>
+
+	<qresource prefix="">
+		<file>font/JetBrainsMonoNL-Regular.ttf</file>
+	</qresource>
+
+</RCC>

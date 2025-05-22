@@ -1,0 +1,80 @@
+QFrame#TqmFrame {
+    background-color: #333333;
+}
+
+QPlainTextEdit#TqmTaskLogs {
+    background-color: #282828;
+    font-size: 12px;
+}
+
+#TqmTasksViewToolbar {
+    background-color: #252525;
+    border-bottom: 1px solid #303030;
+    padding: 4px;
+}
+
+QToolButton#TqmToolButton {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QToolButton#TqmToolButton:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid #444444;
+}
+
+QToolButton#TqmToolButton:pressed {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+QLineEdit#TqmSearchBar {
+    background-color: #282828;
+    border: 1px solid #444444;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #e0e0e0;
+}
+
+QLabel#TqmStatusLabel {
+    color: #6C6C6C;
+}
+
+QHeaderView#TqmHeaderView::section {
+    background-color: #252525;
+    color: #a0a0a0;
+    padding: 6px;
+    border: none;
+    font-weight: 500;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+QTreeView#TqmTasksTreeView {
+    background-color: #282828;
+    alternate-background-color: #333333;
+    border: none;
+    selection-color: #ffffff;
+    outline: none;
+    font-size: 14px;
+}
+
+QTreeView#TqmTasksTreeView::item {
+    border-bottom: 1px solid #4a4a4a;
+    padding: 6px 8px;
+}
+
+QTreeView#TqmTasksTreeView::item:selected {
+    background-color: rgba(74, 136, 218, 0.3);
+}
+
+QTreeView#TqmTasksTreeView::item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+QTreeView#TqmTasksTreeView::item:has-children {
+    background-color: #1d1d1d;
+    font-weight: bold;
+    padding: 8px;
+}
