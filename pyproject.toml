@@ -1,0 +1,67 @@
+[tool.poetry]
+name = "tqm"
+version = "0.1.2"
+description = "Python-based parallel task queuing and execution framework with PySide2 GUI for efficient workflow management."
+authors = ["virgilsisoe <28490646+sisoe24@users.noreply.github.com>"]
+readme = "README.md"
+include = [
+    { path = "tqm/_resources_rc.py", format = ["sdist", "wheel"] }
+
+]
+
+[tool.poetry.scripts]
+tqm = "tmp.local_tests:main"
+tqm-demo = "tqm.demo.demo:run_demo"
+
+[tool.coverage.paths]
+source = ["tqm"]
+
+[tool.coverage.html]
+directory = "tmp/coverage"
+
+[tool.coverage.run]
+omit = ["tqm/tests/*", "tqm/__init__.py", "tqm/utils/*", "tqm/widgets/*"]
+
+[tool.pytest.ini_options]
+testpaths = "tests"
+qt_api = "pyside2"
+markers = ["quick: mark test"]
+addopts = [
+    "--no-header",
+    "--tb=short",
+    "--cov=tqm",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "-W ignore::DeprecationWarning",
+]
+
+[tool.autopep8]
+max_line_length = 100
+
+[tool.isort]
+skip = ["__init__.py", "_resources_rc.py", "version.py"]
+length_sort = true
+add_imports = "from __future__ import annotations"
+
+[tool.poetry.dependencies]
+python = ">=3.7.7,<3.11"
+pyside2 = "^5.15.2.1"
+pytest = "^7.4.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest-qt = "^4.2.0"
+pytest-cov = "^4.1.0"
+pytest-repeat = "^0.9.3"
+pytest-randomly = "3.12.0"
+
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "semver"
+version_provider = "poetry"
+update_changelog_on_bump = true
+major_version_zero = true
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
