@@ -22,4 +22,4 @@ class TaskItem(QStandardItem):
 
         if has_progress:
             # set initial progress to 0
-            self.setData(0, Qt.UserRole)
+            self.setData(0, Qt.DisplayRole)

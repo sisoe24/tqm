@@ -12,7 +12,7 @@ from PySide2.QtWidgets import (QLabel, QWidget, QSplitter, QTabWidget,
 from tqm._core.task_executor import TaskExecutor
 
 from ..widgets import Frame
-from .._core.task import TaskGroup, TqmTaskUnit
+from .._core.task import TaskUnit, TaskGroup
 from .font_loader import get_monospace_font
 from .._core.task_state import TaskStates
 
@@ -187,7 +187,7 @@ class DebugWidget(Frame):
             else:
                 TaskPropertyTreeItem(parent, key, value)
 
-    def populate(self, task: TqmTaskUnit) -> None:
+    def populate(self, task: TaskUnit) -> None:
         """Populate the dialog with task data."""
         self._property_tree.clear()
 

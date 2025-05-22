@@ -9,7 +9,7 @@ from PySide2.QtCore import Qt, QTimer, QObject, QModelIndex
 from PySide2.QtWidgets import (QStyle, QApplication, QStyledItemDelegate,
                                QStyleOptionViewItem, QStyleOptionProgressBar)
 
-from .._core.task import TaskGroup, TqmTaskUnit
+from .._core.task import TaskUnit, TaskGroup
 from .._core.task_options import ProgressMode
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ class ProgressBarAnimator(QObject):
         self._animation_counter = (self._animation_counter + 3) % 200
         self._parent.viewport().update()
 
-    def get_task_animation_value(self, task: TqmTaskUnit) -> int:
+    def get_task_animation_value(self, task: TaskUnit) -> int:
         """Get animation value for a specific task, with random offset for variety."""
 
         # Generate a random offset for this task if it doesn't exist
@@ -71,7 +71,7 @@ class ProgressBarRenderer:
     def handle_determinate_progress(
         pbar_options: QStyleOptionProgressBar,
         progress: int,
-        task: TqmTaskUnit
+        task: TaskUnit
     ) -> None:
         """Configure progress bar options for determinate progress"""
         pbar_options.progress = progress
@@ -87,7 +87,7 @@ class ProgressBarRenderer:
     def handle_indeterminate_progress(
         pbar_options: QStyleOptionProgressBar,
         animation_value: int,
-        task: TqmTaskUnit
+        task: TaskUnit
     ) -> None:
         """Configure progress bar options for indeterminate progress"""
         pbar_options.minimum = 0
@@ -98,7 +98,7 @@ class ProgressBarRenderer:
     @staticmethod
     def handle_completed_state(
         pbar_options: QStyleOptionProgressBar,
-        task: TqmTaskUnit,
+        task: TaskUnit,
         progress: int
     ) -> None:
         """Configure progress bar options for completed/inactive tasks"""
@@ -139,7 +139,7 @@ class ProgressBarDelegate(QStyledItemDelegate):
         painter: QPainter,
         option: QStyleOptionViewItem,
         index: QModelIndex,
-        task: TqmTaskUnit
+        task: TaskUnit
     ) -> None:
         """Paint the progress bar for a task"""
         pbar_options = QStyleOptionProgressBar()
@@ -149,7 +149,7 @@ class ProgressBarDelegate(QStyledItemDelegate):
         pbar_options.minimum = task.progress_bar.minimum
         pbar_options.maximum = task.progress_bar.maximum
 
-        progress = index.data(Qt.UserRole)
+        progress = index.data()
 
         if task.state.is_running:
             if task.progress_bar.mode == ProgressMode.DETERMINATE:
@@ -165,7 +165,7 @@ class ProgressBarDelegate(QStyledItemDelegate):
         QApplication.style().drawControl(QStyle.CE_ProgressBar, pbar_options, painter)
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
-        task: TqmTaskUnit = index.siblingAtColumn(0).data(Qt.UserRole)
+        task: TaskUnit = index.siblingAtColumn(0).data(Qt.UserRole)
 
         if index.column() == self.progress_column:
             self.paint_progress_bar(painter, option, index, task)

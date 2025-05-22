@@ -1,16 +1,34 @@
 [tool.poetry]
 name = "tqm"
-version = "0.1.2"
+version = "0.1.0"
 description = "Python-based parallel task queuing and execution framework with PySide2 GUI for efficient workflow management."
 authors = ["virgilsisoe <28490646+sisoe24@users.noreply.github.com>"]
 readme = "README.md"
+homepage = "https://github.com/sisoe24/tqm"
+repository = "https://github.com/sisoe24/tqm"
+documentation = "https://github.com/sisoe24/tqm#readme"
+keywords = ["task", "queue", "manager", "pyside2", "gui", "threading", "parallel", "vfx"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Desktop Environment :: Window Managers",
+    "Topic :: System :: Monitoring",
+    "Operating System :: OS Independent",
+]
 include = [
     { path = "tqm/_resources_rc.py", format = ["sdist", "wheel"] }
-
 ]
 
 [tool.poetry.scripts]
-tqm = "tmp.local_tests:main"
+tqm-dev = "sandbox.dev:main"
 tqm-demo = "tqm.demo.demo:run_demo"
 
 [tool.coverage.paths]
@@ -54,14 +72,6 @@ pytest-cov = "^4.1.0"
 pytest-repeat = "^0.9.3"
 pytest-randomly = "3.12.0"
 
-
-[tool.commitizen]
-name = "cz_conventional_commits"
-tag_format = "$version"
-version_scheme = "semver"
-version_provider = "poetry"
-update_changelog_on_bump = true
-major_version_zero = true
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

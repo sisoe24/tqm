@@ -33,16 +33,10 @@ Basically, a Task Queue Manager.
 
 ## Installation
 
-Currently, TQM is distributed as a package. Install using pip:
-
 ```bash
-pip install path/to/tqm-0.1.0.tar.gz
-```
-
-Or with Poetry:
-
-```bash
-poetry add path/to/tqm-0.1.0.tar.gz
+poetry add tqm
+# or pip
+pip install tqm
 ```
 
 Dependencies:
@@ -53,7 +47,7 @@ Dependencies:
 ```python
 import time
 from PySide2.QtWidgets import QApplication
-from tqm import TasksManager
+from tqm import TQManager
 
 def some_task(task):
     # This will run in a separate thread
@@ -62,9 +56,10 @@ def some_task(task):
 
 # Create the application
 app = QApplication([])
+app.setStyle('Fusion')
 
 # Create the task manager window
-task_manager = TasksManager(app_name="my_app")
+task_manager = TQManager(app_name="my_app")
 task_manager.show()
 
 # Add a simple task
@@ -117,13 +112,13 @@ task = (
     .with_on_start(lambda t: print("Starting task"))
     .with_on_completed(lambda t: print("Task completed"))
     .with_on_failed(lambda t: print("Task failed"))
-    .with_color("blue")
+    .with_color("lightblue")
     .with_retry_failed(max_retries=3)  # Retry up to 3 times if it fails
     .build()
 )
 
 # Add it to the task manager
-task_manager.add(task)
+task_manager.add_tasks(task)
 ```
 
 ### Tasks with dependencies
@@ -138,7 +133,7 @@ task2 = (
     .build()
 )
 
-task_manager.add(task1, task2)
+task_manager.add_tasks(task1, task2)
 ```
 
 ## Configuration
@@ -147,22 +142,49 @@ tqm stores its settings in:
 - Windows: `%LOCALAPPDATA%\tqm\[app_name]\`
 - Linux/Mac: `~/.config/tqm/[app_name]/`
 
-You can customize various settings like the maximum number of worker threads:
+## Environment
 
-```python
-from tqm._core.settings import open_settings
+- `TQM_CONFIG_PATH` - Configuration directory path
+- `TQM_SETTINGS_PATH` - Settings file path
+- `TQM_QSS_PATH` -Qt stylesheet path
+- `TQM_MONO_FONT` - Monospace font family
+- `TQM_DEBUG` - Enables debug logging when set to '1'
+- `TQM_IDLE_TIMEOUT` - Timeout in milliseconds for idle system detection
 
-with open_settings(mode='w') as s:
-    s.max_workers = 10
-    s.enable_debug = True
-```
+## Python Version Support
+
+TQM currently supports Python 3.7+ to ensure compatibility with VFX environments where older Python versions are still common. We intentionally keep zero dependencies (except PySide2) so VFX applications can use TQM right away.
+However, we'll phase out support for older versions with major releases:
+
+- Current (0.x): Python 3.7+
+- Future (1.x): Python 3.10+ (dropping 3.7, 3.8, and 3.9 support)
+
+Older TQM versions will remain available on the GitHub releases page, but won't receive updates once we move to newer Python versions.
 
 ## Current Status
 
-tqm is still under development but stable enough for most use cases. Some features and documentation might be improved in future updates.
+tqm is still under development but stable enough for most use cases. The core functionality has been battle-tested in production environments for over a year, though this current version is a significant rewrite with improved architecture and features. Some features and documentation might be improved in future updates.
 
-See the GitHub project for more information.
+See the [GitHub Project](link) for more information.
+
+## Theme and style
+
+This application was designed under the OS **dark theme** using Qt's **Fusion** style. I have never tried it under light themes or other Qt styles (Windows, macOS native, Breeze, etc.) which means that I assume no responsibility for any eye damage or aesthetic trauma.
+
+### Custom Styling
+
+The application provides a style.qss file in the default config location which users can modify to customize the appearance of common widgets:
+
+- `TqmTabsWidget`
+- `TqmHeaderView`
+- `TqmTasksLogs`
+- `TqmTasksViewToolbar`
+- `TqmSearchBar`
+- `TqmStatusLabel`
+- `TqmTasksTreeView`
+- `TqmFrame`
+- `TqmToolButton`
 
 ## License
 
-This project is licensed under MIT.
+This project is licensed under [MIT](./LICENSE.md).

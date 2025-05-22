@@ -1,6 +1,6 @@
 """TQM Demo Module
 
-This module provides a comprehensive demo of TQM (Queue Task Manager) features.
+This module provides a comprehensive demo of TQM (Task Queue Manager) features.
 It can be run as a standalone application to showcase TQM capabilities.
 
 Usage:
@@ -8,8 +8,8 @@ Usage:
     >>> from tqm.demo import run_demo
     >>> run_demo()
 
-    Or simply run the module as a script:
-    $ python -m tqm.demo
+    Or simply run the module as a script from the application environment:
+    $ tqm-demo
 """
 
 from __future__ import annotations

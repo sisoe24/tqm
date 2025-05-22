@@ -53,7 +53,7 @@ def get_qss_path(config_path: Path) -> Path:
         return Path(env)
 
     user_qss = config_path / 'style.qss'
-    base_qss = Path(__file__).parent.parent / 'config' / 'style.qss'
+    base_qss = Path(__file__).parent.parent / 'theme' / 'style.qss'
 
     if not user_qss.exists():
         user_qss.write_text(base_qss.read_text())

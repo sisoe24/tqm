@@ -9,10 +9,10 @@ from ..exceptions import TaskEventError
 from .task_callbacks import TaskEventCallbacks
 
 if TYPE_CHECKING:
-    from .task import TaskGroup, TqmTaskUnit, TaskExecutable
+    from .task import TaskUnit, TaskGroup, TaskExecutable
 
 
-def execute_user_callback(callback: TaskEventCallbacks, obj: TqmTaskUnit) -> None:
+def execute_user_callback(callback: TaskEventCallbacks, obj: TaskUnit) -> None:
     if getattr(obj.callbacks, callback):
         getattr(obj.callbacks, callback)(obj)
 

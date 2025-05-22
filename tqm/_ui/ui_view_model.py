@@ -12,7 +12,8 @@ from PySide2.QtWidgets import (QMenu, QAction, QWidget, QSplitter, QTreeView,
 from .toolbar import TasksViewToolbar
 from ..widgets import Frame
 from .task_item import TaskItem
-from .._core.task import TaskGroup, TqmTaskUnit, TaskExecutable
+from .._core.task import TaskUnit, TaskGroup, TaskExecutable
+from ..exceptions import TaskGroupError
 from .font_loader import get_monospace_font
 from .context_menu import TaskFileMenu
 from .debug_widget import DebugWidget
@@ -51,7 +52,7 @@ class TreeModel(QStandardItemModel):
             task = self.itemFromIndex(item.index().siblingAtColumn(0)).data(Qt.UserRole)
             task.comment = item.text()
 
-    def _create_task_row(self, item: TaskItem, task: TqmTaskUnit) -> List[TaskItem]:
+    def _create_task_row(self, item: TaskItem, task: TaskUnit) -> List[TaskItem]:
         return [
             item,
             TaskItem('', has_progress=True),
@@ -63,11 +64,16 @@ class TreeModel(QStandardItemModel):
         ]
 
     def _configure_group_item(self, task_group: TaskGroup) -> None:
+        if not task_group.tasks:
+            raise TaskGroupError(
+                f'Cannot add TaskGroup "{task_group.name}" without any tasks'
+            )
+
         task_group.progress_bar.maximum = len(task_group.tasks)
 
         group_item = task_group.item
         if not group_item:
-            raise ValueError(
+            raise TaskGroupError(
                 f'Expected TaskGroup "{task_group.name}" to have an associated group item, but none was found.'
             )
 
@@ -85,7 +91,7 @@ class TreeModel(QStandardItemModel):
 
             group_item.appendRow(self._create_task_row(task.item, task))
 
-    def add_task(self, task_unit: TqmTaskUnit) -> TaskItem:
+    def add_task(self, task_unit: TaskUnit) -> TaskItem:
 
         task_unit.item = TaskItem(task_unit.name, foreground=task_unit.color)
         task_unit.item.setIcon(QIcon(':/icons/dark/circle-filled'))
@@ -144,7 +150,6 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
         self._progress_delegate = ProgressBarDelegate(self.tasks_model.columns['Progress'], self)
         self.setItemDelegate(self._progress_delegate)
 
-        self.setSortingEnabled(True)
         self.setAlternatingRowColors(True)
         self.setFont(get_monospace_font())
 
@@ -158,6 +163,7 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
         header.setSectionsMovable(True)
 
         self.load_table_state()
+        self.setSortingEnabled(True)
 
     def stop_animation(self) -> None:
         self._progress_delegate.cleanup()
@@ -199,7 +205,7 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
 
         menu = QMenu(self)
 
-        task: TqmTaskUnit = item.data(Qt.UserRole)
+        task: TaskUnit = item.data(Qt.UserRole)
         add_actions(task.actions, TaskActionVisibility.ALWAYS)
 
         if task.state.is_completed:

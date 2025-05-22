@@ -2,7 +2,7 @@ QFrame#TqmFrame {
     background-color: #333333;
 }
 
-QPlainTextEdit#TqmTaskLogs {
+QPlainTextEdit#TqmTasksLogs {
     background-color: #282828;
     font-size: 12px;
 }

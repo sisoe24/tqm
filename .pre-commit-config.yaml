@@ -1,0 +1,28 @@
+repos:
+- hooks:
+  - id: trailing-whitespace
+  - id: double-quote-string-fixer
+  - id: end-of-file-fixer
+  - id: check-ast
+  - id: check-toml
+  repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v5.0.0
+- hooks:
+  - args:
+    - --global-config=pyproject.toml
+    - --in-place
+    id: autopep8
+    verbose: true
+  repo: https://github.com/hhatto/autopep8
+  rev: v2.3.2
+- hooks:
+    - id: isort
+  repo: https://github.com/pycqa/isort
+  rev: 6.0.1
+- hooks:
+  - id: commitizen
+  - id: commitizen-branch
+    stages:
+    - pre-push
+  repo: https://github.com/commitizen-tools/commitizen
+  rev: v4.8.2

@@ -21,7 +21,7 @@ except ImportError:
 
 from ._main import TQManager
 from . import exceptions
-from ._core.task import TaskExecutable, TaskGroup
+from ._core.task import TaskExecutable, TaskGroup, TaskUnit
 from ._core.task_builder import TaskBuilder, TaskGroupBuilder
 from ._core.task_executor import TaskExecutor
 from ._core.task_actions import TaskActionVisibility
@@ -32,6 +32,7 @@ __all__ = [
     'write_log',
     'exceptions',
     'TaskExecutable',
+    'TaskUnit',
     'TaskGroup',
     'TaskBuilder',
     'TaskGroupBuilder',

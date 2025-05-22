@@ -5,17 +5,17 @@ from dataclasses import field, dataclass
 
 from ..utils import extract_fn_name
 from .logger import LOGGER
-from .task_base import TaskEntity
+from .task_base import TaskBase
 from .task_runner import TaskRunner, GroupRunner
 
-TqmTaskUnit = Union[
-    TaskEntity['TaskExecutable', TaskRunner],
-    TaskEntity['TaskGroup', GroupRunner]
+TaskUnit = Union[
+    TaskBase['TaskExecutable', TaskRunner],
+    TaskBase['TaskGroup', GroupRunner]
 ]
 
 
 @dataclass
-class TaskExecutable(TaskEntity['TaskExecutable', TaskRunner]):
+class TaskExecutable(TaskBase['TaskExecutable', TaskRunner]):
     execute: Callable[..., Any] = lambda: None
     group: Optional[TaskGroup] = None
     runner: TaskRunner = field(init=False)
@@ -48,7 +48,7 @@ class TaskExecutable(TaskEntity['TaskExecutable', TaskRunner]):
 
 
 @dataclass
-class TaskGroup(TaskEntity['TaskGroup', GroupRunner]):
+class TaskGroup(TaskBase['TaskGroup', GroupRunner]):
     tasks: Set[TaskExecutable] = field(init=False, default_factory=set[TaskExecutable])
     runner: GroupRunner = field(init=False)
 

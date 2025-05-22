@@ -5,7 +5,7 @@ from contextlib import contextmanager
 
 from PySide2.QtWidgets import QWidget, QTabWidget, QMainWindow, QMessageBox
 
-from ._core.task import TaskGroup, TqmTaskUnit, TaskExecutable
+from ._core.task import TaskUnit, TaskGroup, TaskExecutable
 from ._core.logger import LOGGER, WidgetLogHandler, log_file_handler
 from ._ui.tab_logs import TasksLog
 from ._core.settings import get_qss_path, open_settings, get_config_path
@@ -86,11 +86,15 @@ class TQManager(QMainWindow):
         """Start the workers."""
         self.executor.start_workers()
 
-    def remove_tasks(self, *tasks: TqmTaskUnit) -> None:
+    def set_max_workers(self, workers: int) -> None:
+        """Set the maximum number of worker threads for the executor."""
+        self.executor.set_max_workers(workers)
+
+    def remove_tasks(self, *tasks: TaskUnit) -> None:
         for task in tasks:
             self.executor.remove_task(task)
 
-    def add_tasks(self, *tasks: TqmTaskUnit) -> None:
+    def add_tasks(self, *tasks: TaskUnit) -> None:
         """Add a group of tasks to the queue.
 
         ```

@@ -5,10 +5,10 @@ from uuid import UUID
 from typing import Dict, List, Iterator
 
 from tqm._core.task import TaskGroup, TaskExecutable
-from tqm._core.task_base import TaskEntity
+from tqm._core.task_base import TaskBase
 from tqm._core.task_runner import TaskRunner, GroupRunner
 
-from .task import TqmTaskUnit
+from .task import TaskUnit
 
 
 class DeferredTaskNotFound(Exception):
@@ -32,14 +32,14 @@ class TasksQueue:
     TaskNotFound = TaskNotFoundError
 
     def __init__(self) -> None:
-        self.heap: List[TqmTaskUnit] = []
-        self.deferred: Dict[UUID, TqmTaskUnit] = {}
+        self.heap: List[TaskUnit] = []
+        self.deferred: Dict[UUID, TaskUnit] = {}
 
     def is_empty(self) -> bool:
         """Return True if the queue is empty."""
         return not bool(self.heap)
 
-    def peek(self) -> TqmTaskUnit:
+    def peek(self) -> TaskUnit:
         """Return the task with the highest priority in the queue."""
         if not self.is_empty():
             return self.heap[0]
@@ -52,25 +52,25 @@ class TasksQueue:
     def size_deferred(self) -> int:
         return len(self.deferred)
 
-    def enqueue(self, task: TqmTaskUnit) -> None:
+    def enqueue(self, task: TaskUnit) -> None:
         """Push a task into the queue."""
         heapq.heappush(self.heap, task)
 
-    def dequeue(self) -> TqmTaskUnit:
+    def dequeue(self) -> TaskUnit:
         """Pop the task with the highest priority from the queue."""
         if not self.is_empty():
             return heapq.heappop(self.heap)
         raise IndexError('Queue is empty')
 
-    def suspend(self, task: TqmTaskUnit) -> None:
+    def suspend(self, task: TaskUnit) -> None:
         """Defer a task to be executed later."""
         self.deferred[task.id] = task
 
-    def is_task_deferred(self, task: TqmTaskUnit) -> bool:
+    def is_task_deferred(self, task: TaskUnit) -> bool:
         """Check if task is in the deferred queue."""
         return task.id in self.deferred
 
-    def remove_from_deferred(self, task: TqmTaskUnit) -> TqmTaskUnit:
+    def remove_from_deferred(self, task: TaskUnit) -> TaskUnit:
         """Remove a task from the deferred queue.
 
         Raises:
@@ -84,17 +84,17 @@ class TasksQueue:
             ) from e
         return task
 
-    def main_to_deferred(self, task: TqmTaskUnit) -> None:
+    def main_to_deferred(self, task: TaskUnit) -> None:
         """Transfer a task from the main queue to the deferred queue."""
         self.remove_from_queue(task)
         self.suspend(task)
 
-    def promote_to_main(self, task: TqmTaskUnit) -> None:
+    def promote_to_main(self, task: TaskUnit) -> None:
         """Transfer a task from the deferred queue to the main queue."""
         self.remove_from_deferred(task)
         self.enqueue(task)
 
-    def remove_from_queue(self, task: TqmTaskUnit) -> TqmTaskUnit:
+    def remove_from_queue(self, task: TaskUnit) -> TaskUnit:
         """Remove a task from the queue.
 
         Raises:
@@ -113,7 +113,7 @@ class TasksQueue:
         self.heap.clear()
         self.deferred.clear()
 
-    def remove_task(self, task: TqmTaskUnit) -> None:
+    def remove_task(self, task: TaskUnit) -> None:
         """Delete a task from the queue or deferred queue.
 
         Raises:
@@ -127,10 +127,10 @@ class TasksQueue:
             except self.DeferredTaskNotFound as e:
                 raise self.TaskNotFound from e
 
-    def __iter__(self) -> Iterator[TaskEntity[TaskExecutable, TaskRunner] | TaskEntity[TaskGroup, GroupRunner]]:
+    def __iter__(self) -> Iterator[TaskBase[TaskExecutable, TaskRunner] | TaskBase[TaskGroup, GroupRunner]]:
         return iter([*self.heap, *self.deferred.values()])
 
-    def __contains__(self, task: TqmTaskUnit) -> bool:
+    def __contains__(self, task: TaskUnit) -> bool:
         """
         Check if a given task is present in the queue.
 

@@ -18,7 +18,7 @@ from .task_callbacks import TaskCallbacks
 from .task_predicate import TaskPredicate
 
 if TYPE_CHECKING:
-    from .task import TqmTaskUnit
+    from .task import TaskUnit
 
 T = TypeVar('T')
 W = TypeVar('W', bound=BaseRunner)
@@ -33,7 +33,7 @@ def index_gen(suffix: str) -> int:
 
 
 @dataclass
-class TaskEntity(Generic[T, W]):
+class TaskBase(Generic[T, W]):
     """Base class for both Task and TaskGroup entities."""
 
     # attributes
@@ -61,8 +61,8 @@ class TaskEntity(Generic[T, W]):
     progress_bar: ProgressBarOptions = field(default_factory=ProgressBarOptions, repr=False)
 
     # relationships
-    parent: Optional[TqmTaskUnit] = None
-    children: Set[TqmTaskUnit] = field(init=False, default_factory=set['TqmTaskUnit'])
+    parent: Optional[TaskUnit] = None
+    children: Set[TaskUnit] = field(init=False, default_factory=set['TqmTaskUnit'])
 
     # id
     id: uuid.UUID = field(init=False, default_factory=uuid.uuid4)
@@ -84,11 +84,11 @@ class TaskEntity(Generic[T, W]):
         self._initial_attempts = self.retry_attempts
 
     def __eq__(self, value: object) -> bool:
-        if not isinstance(value, TaskEntity):
+        if not isinstance(value, TaskBase):
             raise NotImplementedError(f'Cannot compare a task object to {type(value)}')
         return self.id == value.id
 
-    def __lt__(self, other: TaskEntity[T, W]) -> bool:
+    def __lt__(self, other: TaskBase[T, W]) -> bool:
         """Comparison method for the heap queue."""
         return self.index < other.index
 
@@ -99,9 +99,9 @@ class TaskEntity(Generic[T, W]):
         """Log a message with the task name as prefix."""
         LOGGER.log(USER_LEVEL, f'{self.name}: {text}')
 
-    def get_children(self) -> Set[TqmTaskUnit]:
+    def get_children(self) -> Set[TaskUnit]:
         """Return all the children of the task recursively."""
-        def recurse(task: TqmTaskUnit) -> Generator[TqmTaskUnit, Any, None]:
+        def recurse(task: TaskUnit) -> Generator[TaskUnit, Any, None]:
             for child in filter(lambda t: not t.state.is_inactive, task.children):
                 yield child
                 yield from recurse(child)

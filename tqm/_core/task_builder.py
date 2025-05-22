@@ -6,7 +6,7 @@ from typing import (Any, Set, Dict, List, Generic, TypeVar, Callable, Optional,
 from PySide2.QtGui import QColor
 from PySide2.QtCore import Qt
 
-from .task import TaskGroup, TqmTaskUnit, TaskExecutable
+from .task import TaskUnit, TaskGroup, TaskExecutable
 from ..utils import RandomColor
 from ..typings import RGBA, TASK_COLOR
 from .task_actions import TaskAction, TaskActionVisibility
@@ -30,7 +30,7 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         self.color = QColor(230, 230, 230, 255)
         self.comment = ''
 
-        self.parent: Optional[TqmTaskUnit] = None
+        self.parent: Optional[TaskUnit] = None
 
         self.predicate: Optional[Callable[..., bool]] = None
         self.retry_interval_ms = 2000
@@ -62,7 +62,7 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         self.comment = comment
         return self
 
-    def with_wait_for(self: Builder, parent: TqmTaskUnit) -> Builder:
+    def with_wait_for(self: Builder, parent: TaskUnit) -> Builder:
         """Wait for another task/group to finish before starting."""
         self.parent = parent
         return self

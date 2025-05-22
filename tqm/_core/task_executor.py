@@ -7,7 +7,7 @@ from functools import partial
 
 from PySide2.QtCore import Qt, Slot, QTimer, Signal, QObject
 
-from .task import TqmTaskUnit, TaskExecutable
+from .task import TaskUnit, TaskExecutable
 from .queue import TasksQueue, TaskNotFoundError
 from .logger import LOGGER
 from .shutdown import ShutdownThread
@@ -30,7 +30,7 @@ class _ExecutorCallbacks(RunnerSignals):
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
 
-    def on_task_added(self, callback: Callable[[TqmTaskUnit], Any]) -> None:
+    def on_task_added(self, callback: Callable[[TaskUnit], Any]) -> None:
         """On task added callback.
 
         ```
@@ -40,7 +40,7 @@ class _ExecutorCallbacks(RunnerSignals):
         """
         self.task_added.connect(callback, Qt.QueuedConnection)
 
-    def on_task_started(self, callback: Callable[[TqmTaskUnit], Any]) -> None:
+    def on_task_started(self, callback: Callable[[TaskUnit], Any]) -> None:
         """On task started callback.
 
 
@@ -51,7 +51,7 @@ class _ExecutorCallbacks(RunnerSignals):
         """
         self.runner_started.connect(callback, Qt.QueuedConnection)
 
-    def on_task_completed(self, callback: Callable[[TqmTaskUnit], Any]) -> None:
+    def on_task_completed(self, callback: Callable[[TaskUnit], Any]) -> None:
         """On task completed callback.
 
         ```
@@ -61,7 +61,7 @@ class _ExecutorCallbacks(RunnerSignals):
         """
         self.runner_completed.connect(callback, Qt.QueuedConnection)
 
-    def on_task_finished(self, callback: Callable[[TqmTaskUnit], Any]) -> None:
+    def on_task_finished(self, callback: Callable[[TaskUnit], Any]) -> None:
         """On task finished callback.
 
         ```
@@ -71,7 +71,7 @@ class _ExecutorCallbacks(RunnerSignals):
         """
         self.runner_finished.connect(callback, Qt.QueuedConnection)
 
-    def on_task_failed(self, callback: Callable[[TqmTaskUnit], Any]) -> None:
+    def on_task_failed(self, callback: Callable[[TaskUnit], Any]) -> None:
         """On task failed callback.
 
         ```
@@ -81,7 +81,7 @@ class _ExecutorCallbacks(RunnerSignals):
         """
         self.runner_failed.connect(callback, Qt.QueuedConnection)
 
-    def on_task_removed(self, callback: Callable[[TqmTaskUnit], Any]) -> None:
+    def on_task_removed(self, callback: Callable[[TaskUnit], Any]) -> None:
         """On task removed callback.
 
         ```
@@ -127,7 +127,7 @@ class _ExecutorBlocker(QObject):
 
     def _handle_predicate(
         self,
-        task: TqmTaskUnit,
+        task: TaskUnit,
         predicate_event: PredicateEventType
     ) -> None:
 
@@ -148,7 +148,7 @@ class _ExecutorBlocker(QObject):
         else:
             raise TaskPredicateError('Unknown predicate event')
 
-    def _block_task_with_predicate(self, task: TqmTaskUnit) -> bool:
+    def _block_task_with_predicate(self, task: TaskUnit) -> bool:
         """Blocks the given task if its predicate is not resolved."""
         if not task.predicate.condition or task.predicate.condition():
             return False
@@ -157,7 +157,7 @@ class _ExecutorBlocker(QObject):
         task.state.set_blocked('Predicate failed')
         return True
 
-    def _block_task_with_parent(self, task: TqmTaskUnit) -> bool:
+    def _block_task_with_parent(self, task: TaskUnit) -> bool:
         """Blocks the given task if its parent task is not completed."""
         if not task.parent:
             return False
@@ -169,7 +169,7 @@ class _ExecutorBlocker(QObject):
 
         return False
 
-    def should_block(self, task: TqmTaskUnit) -> bool:
+    def should_block(self, task: TaskUnit) -> bool:
         if self._block_task_with_predicate(task):
             self._executor.queue.suspend(task)
             task.predicate.evaluate(partial(self._handle_predicate, task))
@@ -266,7 +266,7 @@ class TaskExecutor(QObject):
         self._blocker.predicate_failed.connect(self._on_task_failed)
         self._blocker.predicate_successful.connect(self._predicate_success)
 
-        self.registry: Set[TqmTaskUnit] = set()
+        self.registry: Set[TaskUnit] = set()
 
         self._is_shutting_down = False
 
@@ -282,17 +282,17 @@ class TaskExecutor(QObject):
         self.max_workers = value
         self._threadpool.setMaxThreadCount(self.max_workers+1)
 
-    def _predicate_success(self, task: TqmTaskUnit) -> None:
+    def _predicate_success(self, task: TaskUnit) -> None:
         self.queue.promote_to_main(task)
         self.start_workers()
 
-    def _remove_and_cleanup_task(self, task: TqmTaskUnit) -> None:
+    def _remove_and_cleanup_task(self, task: TaskUnit) -> None:
         task.delete()
         for child in task.children.copy():
             self.remove_task(child)
         self.callbacks.task_removed.emit(task)
 
-    def remove_task(self, task: TqmTaskUnit) -> None:
+    def remove_task(self, task: TaskUnit) -> None:
         """Attempt to remove a task from the queue.
 
         Tasks that depend on the removed task will be also removed since they will
@@ -322,7 +322,7 @@ class TaskExecutor(QObject):
 
         self._remove_and_cleanup_task(task)
 
-    def retry_task(self, task: TqmTaskUnit) -> None:
+    def retry_task(self, task: TaskUnit) -> None:
         """Retry a failed task.
 
         This method retries a failed task by re-adding it to the queue.
@@ -350,7 +350,7 @@ class TaskExecutor(QObject):
         self._start_worker()
 
     @Slot(object)
-    def _on_task_failed(self, task: TqmTaskUnit, exception: Optional[Exception] = None) -> None:
+    def _on_task_failed(self, task: TaskUnit, exception: Optional[Exception] = None) -> None:
         """Handle a failed task.
 
         If the task can be retried, it will be re-added to the queue.
@@ -374,7 +374,7 @@ class TaskExecutor(QObject):
         task.set_failed(exception, str(exception))
 
     @Slot(object)
-    def _on_task_completed(self, task: TqmTaskUnit, *, autostart: bool = True) -> None:
+    def _on_task_completed(self, task: TaskUnit, *, autostart: bool = True) -> None:
         task.state.set_completed()
         LOGGER.info(f'{task.name} completed')
 
@@ -388,19 +388,19 @@ class TaskExecutor(QObject):
             self.start_workers()
 
     @Slot(object)
-    def _on_task_started(self, task: TqmTaskUnit) -> None:
+    def _on_task_started(self, task: TaskUnit) -> None:
         self.callbacks.runner_started.emit(task)
         task.state.set_running()
 
     @Slot(list)
-    def _on_add_tasks(self, tasks: List[TqmTaskUnit]) -> None:
+    def _on_add_tasks(self, tasks: List[TaskUnit]) -> None:
         for task in tasks:
             if task not in self.registry:
                 self.add_task(task)
 
         self.start_workers()
 
-    def _initialize_task(self, task: TqmTaskUnit) -> None:
+    def _initialize_task(self, task: TaskUnit) -> None:
 
         self.queue.enqueue(task)
 
@@ -413,7 +413,7 @@ class TaskExecutor(QObject):
         signals.runner_finished.connect(self.callbacks.runner_finished.emit, Qt.QueuedConnection)
         signals.group_task_added.connect(self._on_add_tasks)
 
-    def add_task(self, task: TqmTaskUnit) -> TqmTaskUnit:
+    def add_task(self, task: TaskUnit) -> TaskUnit:
         if self._is_shutting_down:
             LOGGER.warning('Task manager is shutting down. Cannot add new task')
             return task
@@ -445,7 +445,7 @@ class TaskExecutor(QObject):
         while self.queue.size() and self._threadpool.activeThreadCount() <= self.max_workers:
             self._start_worker()
 
-    def get_all_tasks(self) -> Set[TqmTaskUnit]:
+    def get_all_tasks(self) -> Set[TaskUnit]:
         return self.registry
 
     def shutdown(self) -> None:

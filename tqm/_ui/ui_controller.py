@@ -6,7 +6,7 @@ from functools import partial
 from PySide2.QtCore import Qt, Slot, Signal, QObject
 from PySide2.QtWidgets import QWidget, QInputDialog
 
-from .._core.task import TaskGroup, TqmTaskUnit, TaskExecutable
+from .._core.task import TaskUnit, TaskGroup, TaskExecutable
 from .ui_view_model import TaskManagerView
 from .._core.settings import Settings, open_settings
 from .._core.task_executor import TaskExecutor
@@ -164,7 +164,7 @@ class TaskManagerController(QObject):
 
     def _update_item_data(
         self,
-        task: TqmTaskUnit,
+        task: TaskUnit,
         column_name: str,
         value: Any,
         role: Qt.ItemDataRole = Qt.DisplayRole
@@ -179,9 +179,9 @@ class TaskManagerController(QObject):
         item(task.item.row(), column).setData(value, role)
 
     @Slot(object, float)
-    def _on_task_update_progress(self, task: TqmTaskUnit, value: float) -> None:
+    def _on_task_update_progress(self, task: TaskUnit, value: float) -> None:
         """Update the progress bar of a task."""
-        self._update_item_data(task, 'Progress', round(value, 2), Qt.UserRole)
+        self._update_item_data(task, 'Progress', round(value, 2))
 
     @Slot(object)
     def _on_task_completed(self, task: TaskExecutable, *args: Any, **kwargs: Any) -> None:
@@ -189,7 +189,7 @@ class TaskManagerController(QObject):
         self._update_item_data(task, 'Completed', task.state.get_last().timestamp)
 
     @Slot(object)
-    def _on_task_finished(self, task: TqmTaskUnit) -> None:
+    def _on_task_finished(self, task: TaskUnit) -> None:
         if not isinstance(task, TaskExecutable):
             return
 
@@ -198,10 +198,10 @@ class TaskManagerController(QObject):
             return
 
         completed_tasks = len(list(filter(lambda t: t.state.is_completed, group.tasks)))
-        self._update_item_data(group, 'Progress', completed_tasks, Qt.UserRole)
+        self._update_item_data(group, 'Progress', completed_tasks)
 
     @Slot(object)
-    def _on_task_started(self, task: TqmTaskUnit) -> None:
+    def _on_task_started(self, task: TaskUnit) -> None:
         self._update_item_data(task, 'Started', task.state.get_last().timestamp)
 
     @Slot()
@@ -209,14 +209,14 @@ class TaskManagerController(QObject):
         for task in self.get_selected_tasks():
             self._executor.retry_task(task)
 
-    def add_task(self, task: TqmTaskUnit) -> None:
+    def add_task(self, task: TaskUnit) -> None:
         task.item = self.view.tree_view.tasks_model.add_task(task)
         task.runner.signals.task_progress_updated.connect(
             partial(self._on_task_update_progress, task)
         )
         self.view.toggle_expand(True)
 
-    def remove_task(self, task: TqmTaskUnit) -> None:
+    def remove_task(self, task: TaskUnit) -> None:
         """
         Removes a task from the tasks model and its associated tree view.
 
@@ -255,9 +255,9 @@ class TaskManagerController(QObject):
         for task in self.get_selected_tasks():
             self._executor.remove_task(task)
 
-    def get_all_tasks(self) -> List[TqmTaskUnit]:
+    def get_all_tasks(self) -> List[TaskUnit]:
         """Get a list of all tasks in the tree view."""
-        tasks: List[TqmTaskUnit] = []
+        tasks: List[TaskUnit] = []
         for i in range(self.view.tree_view.tasks_model.rowCount()):
             item = self.view.tree_view.tasks_model.item(i, 0).data(Qt.UserRole)
             tasks.append(item)
@@ -265,6 +265,6 @@ class TaskManagerController(QObject):
                 tasks.extend(item.tasks)
         return tasks
 
-    def get_selected_tasks(self) -> List[TqmTaskUnit]:
+    def get_selected_tasks(self) -> List[TaskUnit]:
         """Get a list of selected tasks in the tree view."""
         return [item.data(Qt.UserRole) for item in self.view.tree_view.get_selected_items()]

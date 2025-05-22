@@ -1,7 +1,8 @@
 # Local
 local_tests.py
+sandbox/
+tmp/
 tqm/_resources_rc.py
-
 
 # Applications
 *.app

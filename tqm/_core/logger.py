@@ -17,7 +17,6 @@ logging.addLevelName(USER_LEVEL, 'USER')
 
 LOG_FILE_FORMAT = logging.Formatter(' - '.join([
     '%(asctime)s',
-    '%(app)s',
     '%(levelname)-8s',
     '%(threadName)s ID:%(thread)-15d',
     '%(message)s'
@@ -29,18 +28,6 @@ LOG_WIDGET_FORMAT = logging.Formatter(' - '.join([
     '%(threadName)s ID:%(thread)-15d',
     '%(message)s'
 ]), '%H:%M:%S')
-
-
-class _CustomFilter(logging.Filter):
-
-    def __init__(self) -> None:
-        app = os.getenv('TQM_APP_NAME', 'tqm')
-        version = os.getenv('TQM_VERSION', 'unknown-version')
-        self.label = f'{app}@{version}'
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.app = self.label
-        return True
 
 
 class TqmLogger(logging.Logger):
@@ -132,6 +119,5 @@ def write_log(msg: str, *, stream: Optional[TextIO] = None) -> None:
 
 
 LOGGER = TqmLogger()
-if os.getenv('TQM_ENABLE_DEBUG') == '1':
+if os.getenv('TQM_DEBUG') == '1':
     LOGGER.addHandler(_console_handler())
-LOGGER.addFilter(_CustomFilter())
