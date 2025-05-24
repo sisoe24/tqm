@@ -1,19 +1,11 @@
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, Dict, Generic, TypeVar, Callable, Optional
 from dataclasses import dataclass
 
 from tqm.utils import extract_fn_name
 
 T = TypeVar('T')
-
-
-class TaskEventCallbacks(str, Enum):
-    ON_START = 'on_start'
-    ON_COMPLETED = 'on_completed'
-    ON_FAILED = 'on_failed'
-    ON_FINISH = 'on_finish'
 
 
 @dataclass

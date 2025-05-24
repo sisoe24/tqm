@@ -23,6 +23,7 @@ class _ExecutorCallbacks(RunnerSignals):
     # ui
     task_added = Signal(object)
     task_removed = Signal(object)
+    task_finished = Signal(object)
 
     status_updated = Signal(dict)
     system_idle = Signal()
@@ -69,7 +70,7 @@ class _ExecutorCallbacks(RunnerSignals):
         ```
 
         """
-        self.runner_finished.connect(callback, Qt.QueuedConnection)
+        self.task_finished.connect(callback, Qt.QueuedConnection)
 
     def on_task_failed(self, callback: Callable[[TaskUnit], Any]) -> None:
         """On task failed callback.
@@ -365,6 +366,9 @@ class TaskExecutor(QObject):
 
         LOGGER.error(f'{task.name} failed: {exception}')
 
+        if task.callbacks.on_finish:
+            task.callbacks.on_finish(task)
+
         for child in filter(lambda t: t.state.is_blocked, task.children):
             self._on_task_failed(child, TaskParentError(f'Parent {task.name} failed.'))
 
@@ -373,10 +377,17 @@ class TaskExecutor(QObject):
 
         task.set_failed(exception, str(exception))
 
+        self._on_task_finished(task)
+
     @Slot(object)
     def _on_task_completed(self, task: TaskUnit, *, autostart: bool = True) -> None:
         task.state.set_completed()
         LOGGER.info(f'{task.name} completed')
+
+        if task.callbacks.on_completed:
+            task.callbacks.on_completed(task)
+
+        self._on_task_finished(task)
 
         self.callbacks.runner_completed.emit(task)
 
@@ -389,8 +400,18 @@ class TaskExecutor(QObject):
 
     @Slot(object)
     def _on_task_started(self, task: TaskUnit) -> None:
+        if task.callbacks.on_start:
+            task.callbacks.on_start(task)
+
         self.callbacks.runner_started.emit(task)
         task.state.set_running()
+
+    @Slot(object)
+    def _on_task_finished(self, task: TaskUnit) -> None:
+        if task.callbacks.on_finish:
+            task.callbacks.on_finish(task)
+
+        self.callbacks.task_finished.emit(task)
 
     @Slot(list)
     def _on_add_tasks(self, tasks: List[TaskUnit]) -> None:
@@ -410,7 +431,6 @@ class TaskExecutor(QObject):
         signals.runner_failed.connect(self._on_task_failed, Qt.QueuedConnection)
         signals.runner_completed.connect(self._on_task_completed, Qt.QueuedConnection)
         signals.runner_started.connect(self._on_task_started, Qt.QueuedConnection)
-        signals.runner_finished.connect(self.callbacks.runner_finished.emit, Qt.QueuedConnection)
         signals.group_task_added.connect(self._on_add_tasks)
 
     def add_task(self, task: TaskUnit) -> TaskUnit:

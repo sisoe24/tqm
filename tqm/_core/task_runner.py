@@ -6,15 +6,9 @@ from typing import TYPE_CHECKING
 from PySide2.QtCore import Slot, Signal, QObject, QRunnable
 
 from ..exceptions import TaskEventError
-from .task_callbacks import TaskEventCallbacks
 
 if TYPE_CHECKING:
-    from .task import TaskUnit, TaskGroup, TaskExecutable
-
-
-def execute_user_callback(callback: TaskEventCallbacks, obj: TaskUnit) -> None:
-    if getattr(obj.callbacks, callback):
-        getattr(obj.callbacks, callback)(obj)
+    from .task import TaskGroup, TaskExecutable
 
 
 class RunnerSignals(QObject):
@@ -25,7 +19,6 @@ class RunnerSignals(QObject):
     runner_completed = Signal(object)
     runner_failed = Signal(object, Exception)
     runner_started = Signal(object)
-    runner_finished = Signal(object)
 
     # progress is used by the user if needed
     task_progress_updated = Signal(int)
@@ -57,7 +50,6 @@ class GroupRunner(BaseRunner):
     @Slot()
     def run(self) -> None:
 
-        execute_user_callback(TaskEventCallbacks.ON_START, obj=self.group)
         self.signals.runner_started.emit(self.group)
 
         # add all tasks from the main thread
@@ -69,14 +61,9 @@ class GroupRunner(BaseRunner):
 
         if all(task.state.is_completed for task in self.group.tasks):
             self.signals.runner_completed.emit(self.group)
-            execute_user_callback(TaskEventCallbacks.ON_COMPLETED, obj=self.group)
 
         elif any(task.state.is_failed for task in self.group.tasks):
             self.signals.runner_failed.emit(self.group, TaskEventError('Some tasks failed'))
-            execute_user_callback(TaskEventCallbacks.ON_FAILED, obj=self.group)
-
-        self.signals.runner_finished.emit(self.group)
-        execute_user_callback(TaskEventCallbacks.ON_FINISH, obj=self.group)
 
 
 class TaskRunner(BaseRunner):
@@ -91,20 +78,12 @@ class TaskRunner(BaseRunner):
     @Slot()
     def run(self) -> None:
 
-        execute_user_callback(TaskEventCallbacks.ON_START, obj=self.task)
-
         try:
             self.signals.runner_started.emit(self.task)
             self.task.execute(self.task)
 
         except Exception as e:
             self.signals.runner_failed.emit(self.task, e)
-            execute_user_callback(TaskEventCallbacks.ON_FAILED, obj=self.task)
 
         else:
             self.signals.runner_completed.emit(self.task)
-            execute_user_callback(TaskEventCallbacks.ON_COMPLETED, obj=self.task)
-
-        finally:
-            self.signals.runner_finished.emit(self.task)
-            execute_user_callback(TaskEventCallbacks.ON_FINISH, obj=self.task)

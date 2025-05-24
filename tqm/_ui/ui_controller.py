@@ -152,9 +152,9 @@ class TaskManagerController(QObject):
         view.toolbar.run_all_tasks.clicked.connect(executor.start_workers)
 
         executor.callbacks.task_added.connect(self.add_task)
+        executor.callbacks.task_finished.connect(self._on_task_finished)
         executor.callbacks.runner_completed.connect(self._on_task_completed)
         executor.callbacks.runner_started.connect(self._on_task_started)
-        executor.callbacks.runner_finished.connect(self._on_task_finished)
         executor.callbacks.task_removed.connect(self.remove_task)
 
         self.ops = _TaskButtonsController(self.view, executor, self)

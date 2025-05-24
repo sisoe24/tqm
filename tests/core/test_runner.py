@@ -22,7 +22,6 @@ class estTaskRunner:
         # Connect to signals
         runner.signals.runner_started.connect(lambda _: signals_received.append('started'))
         runner.signals.runner_completed.connect(lambda _: signals_received.append('completed'))
-        runner.signals.runner_finished.connect(lambda _: signals_received.append('finished'))
 
         # Run the task
         runner.run()
@@ -30,7 +29,6 @@ class estTaskRunner:
         # Check signal order
         assert signals_received[0] == 'started'
         assert signals_received[1] == 'completed'
-        assert signals_received[2] == 'finished'
 
     def test_task_runner_exception(self, qtbot: QtBot):
         """Test that the TaskRunner properly handles exceptions."""
@@ -48,7 +46,6 @@ class estTaskRunner:
         runner.signals.runner_failed.connect(
             lambda t, e: (signals_received.append('failed'), exceptions_caught.append(str(e)))
         )
-        runner.signals.runner_finished.connect(lambda _: signals_received.append('finished'))
 
         # Run the task
         runner.run()
@@ -56,7 +53,6 @@ class estTaskRunner:
         # Check signal order
         assert signals_received[0] == 'started'
         assert signals_received[1] == 'failed'
-        assert signals_received[2] == 'finished'
         assert 'Task failed intentionally' in exceptions_caught[0]
 
     def test_callback_execution(self, qtbot: QtBot, app: TQManager):
@@ -426,9 +422,9 @@ class TestGroupRunner:
         signals_received = SafeList[str]()
         runner.signals.runner_started.connect(lambda _: signals_received.append('started'))
         runner.signals.runner_completed.connect(
-            lambda g: (g.state.set_completed(), signals_received.append('completed'),
-                       ))
-        runner.signals.runner_finished.connect(lambda _: signals_received.append('finished'))
+            lambda g: (
+                g.state.set_completed(), signals_received.append('completed'),
+            ))
 
         # We need to handle the group_task_added signal to simulate what TaskExecutor would do
         def handle_task_added(tasks: List[TaskExecutable]):
@@ -450,7 +446,6 @@ class TestGroupRunner:
         # Verify signals
         assert signals_received[0] == 'started'
         assert signals_received[1] == 'completed'
-        assert signals_received[2] == 'finished'
 
         # Verify states
         assert task1.state.is_completed

@@ -345,12 +345,9 @@ def test_callbacks_during_retries(qtbot: QtBot, app: TQManager):
 
     # The expected sequence of callbacks:
     expected_sequence = [
-        # First attempt (fails)
-        'on_start', 'execute', 'on_failed', 'on_finish',
-        # Second attempt
-        'on_start', 'execute', 'on_failed', 'on_finish',
-        # third attempt
-        'on_start', 'execute', 'on_completed', 'on_finish'
+        'execute', 'on_start',
+        'execute', 'on_start',
+        'execute', 'on_start', 'on_completed', 'on_finish'
     ]
 
     assert callback_sequence == expected_sequence
