@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tqm"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python-based parallel task queuing and execution framework with PySide2 GUI for efficient workflow management."
 authors = ["virgilsisoe <28490646+sisoe24@users.noreply.github.com>"]
 readme = "README.md"
