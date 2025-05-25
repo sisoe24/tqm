@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any, Callable, Optional, Generator
 from contextlib import contextmanager
 
-from PySide2.QtWidgets import QWidget, QTabWidget, QMainWindow, QMessageBox
+from PySide2.QtCore import Qt
+from PySide2.QtWidgets import QWidget, QSplitter, QMainWindow, QMessageBox
 
 from ._core.task import TaskUnit, TaskGroup, TaskExecutable
 from ._core.logger import LOGGER, WidgetLogHandler, log_file_handler
@@ -65,11 +66,12 @@ class TQManager(QMainWindow):
         self._controller = TaskManagerController(self._view, self.executor, settings)
         self._controller.ops.max_workers_updated.connect(self.executor.set_max_workers)
 
-        self.tabs = QTabWidget()
-        self.tabs.setObjectName('TqmTabsWidget')
-        self.tabs.addTab(self._view, 'Tasks')
-        self.tabs.addTab(self._logs, 'Logs')
-        self.setCentralWidget(self.tabs)
+        splitter = QSplitter(Qt.Vertical)
+        splitter.addWidget(self._view)
+        splitter.addWidget(self._logs)
+        splitter.setSizes([100, 0])
+
+        self.setCentralWidget(splitter)
 
     @property
     def callbacks(self) -> _ExecutorCallbacks:
