@@ -292,7 +292,7 @@ def test_group_with_retry(qtbot: QtBot, app: TQManager):
     retry_task = (
         TaskBuilder('RetryTask')
         .with_event(lambda t: failure_controller(t, fail_count=1))
-        .with_retry_failed(1)  # Allow one retry
+        .with_retry(1, delay_seconds=0)  # Allow one retry
         .build()
     )
 
@@ -322,7 +322,8 @@ def test_group_with_retry(qtbot: QtBot, app: TQManager):
 
     # Verify task states
     assert_task_completed(retry_task, [
-        'inactive', 'waiting', 'running', 'inactive', 'waiting', 'running', 'completed'
+        'inactive', 'waiting', 'running', 'retrying',
+        'inactive', 'waiting', 'running', 'completed'
     ])
     assert_task_completed(regular_task)
     assert_task_completed(group)

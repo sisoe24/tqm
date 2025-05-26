@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import logging
 from typing import Dict, Optional
 
@@ -14,11 +13,12 @@ from .._core.logger import LOGGER
 from .._core.settings import open_settings
 
 LOG_COLORS = {
-    'DEBUG': 'aqua',
-    'INFO': 'white',
-    'WARNING': 'orange',
-    'ERROR': 'red',
-    'CRITICAL': 'magenta',
+    'DEBUG':    '#00bcd4',  # Cyan
+    'INFO':     '#e0e0e0',  # Light gray
+    'WARNING':  '#ffb300',  # Amber
+    'ERROR':    '#e53935',  # Red
+    'CRITICAL': '#d500f9',  # Purple
+    'USER':     '#81da27',  # Purple
 }
 
 
@@ -53,7 +53,11 @@ class TasksLog(QWidget):
         layout.addWidget(self._logs)
         self.setLayout(layout)
 
-        self._random_color = RandomColor()
+        self._random_color = RandomColor(
+            min_value=70,
+            max_value=220,
+            exclude_colors=list(LOG_COLORS.values())
+        )
         self._thread_colors: Dict[str, str] = {}
 
     def _on_contextMenuEvent(self, point: QPoint) -> None:
@@ -103,19 +107,22 @@ class TasksLog(QWidget):
         self._logs.clear()
 
     def log(self, text: str, level_name: str = 'INFO', thread: str = '') -> None:
+        # TODO: Add a no color flag?
 
-        if level_name == 'USER':
-            if thread in self._thread_colors:
-                color = self._thread_colors[thread]
-            else:
-                color = self._random_color.generate().name()
-                self._thread_colors[thread] = color
-
-        else:
-            color = LOG_COLORS.get(level_name, 'white')
-
+        # we need to replace the regular space with html space if we want to keep
+        # the formatting
         text = text.replace(' ', '&nbsp;')
-        self._logs.appendHtml(f'<font color="{color}">{text}</font>')
+
+        if thread not in self._thread_colors:
+            self._thread_colors[thread] = self._random_color.generate().name()
+
+        # use a different color for the log level
+        log_level_color = LOG_COLORS[level_name] if level_name in LOG_COLORS else 'white'
+        parts = text.split('|', 2)
+        parts[1] = f'<font color="{log_level_color}">{parts[1]}</font>'
+        text = '|'.join(parts)
+
+        self._logs.appendHtml(f'<font color="{self._thread_colors[thread]}">{text}</font>')
         self._logs.verticalScrollBar().setValue(
             self._logs.verticalScrollBar().maximum()
         )

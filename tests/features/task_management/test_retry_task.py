@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from itertools import count
 
+import pytest
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskExecutable, exceptions
@@ -38,9 +39,6 @@ def test_simple_task_failure_handling(qtbot: QtBot, app: TQManager):
     # a failed task should have an exception
     assert isinstance(task1.exception, RuntimeError)
     assert str(task1.exception) == 'TestTask1'
-
-    # we have never given the task the ability to retry if failing
-    assert not task1.can_retry()
 
 
 def test_parent_child_task_failure_propagation(qtbot: QtBot, app: TQManager):
@@ -104,7 +102,7 @@ def test_single_retry_success_after_failure(qtbot: QtBot, app: TQManager):
     task1 = (
         TaskBuilder('TestTask1')
         .with_event(lambda t: raise_error(t, skip_error=bool(next(index))))
-        .with_retry_failed(1)
+        .with_retry(1, delay_seconds=0)
         .build()
     )
 
@@ -118,9 +116,8 @@ def test_single_retry_success_after_failure(qtbot: QtBot, app: TQManager):
     # when we retry
     assert_task_completed(
         task1, [
-            'inactive', 'waiting', 'running',
-            'inactive',
-            'waiting', 'running', 'completed'
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'completed'
         ])
 
 
@@ -137,7 +134,7 @@ def test_multiple_retries_eventual_success(qtbot: QtBot, app: TQManager):
     task1 = (
         TaskBuilder('TestTask1')
         .with_event(lambda t: raise_error(t, skip_error=next(index) == 5))
-        .with_retry_failed(5)
+        .with_retry(5, delay_seconds=0)
         .build()
     )
 
@@ -152,13 +149,12 @@ def test_multiple_retries_eventual_success(qtbot: QtBot, app: TQManager):
     assert_task_completed(
         task1,
         [
-            'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'completed'
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'completed'
         ]
     )
 
@@ -177,7 +173,7 @@ def test_exhausted_retries_final_failure(qtbot: QtBot, app: TQManager):
     task1 = (
         TaskBuilder('TestTask1')
         .with_event(lambda t: raise_error(t, skip_error=next(index) == 6))
-        .with_retry_failed(5)
+        .with_retry(5, delay_seconds=0)
         .build()
     )
 
@@ -192,13 +188,12 @@ def test_exhausted_retries_final_failure(qtbot: QtBot, app: TQManager):
     assert_task_failed(
         task1,
         [
-            'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'inactive',
-            'waiting', 'running', 'failed'
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'failed'
         ]
     )
 
@@ -218,7 +213,7 @@ def test_dependent_task_chain_with_retry(qtbot: QtBot, app: TQManager):
     task1 = (
         TaskBuilder('TestTask1')
         .with_event(lambda t: raise_error(t, bool(next(index))))
-        .with_retry_failed(1)
+        .with_retry(1, delay_seconds=0)
         .build()
     )
 
@@ -244,18 +239,22 @@ def test_dependent_task_chain_with_retry(qtbot: QtBot, app: TQManager):
         app.start_workers()
 
     assert_task_completed(
-        task1,
-        ['inactive', 'waiting', 'running', 'inactive', 'waiting', 'running', 'completed']
+        task1, [
+            'inactive', 'waiting', 'running', 'retrying',
+            'inactive', 'waiting', 'running', 'completed'
+        ]
     )
 
     assert_task_completed(
-        task2,
-        ['inactive', 'waiting', 'blocked', 'waiting', 'running', 'completed']
+        task2, [
+            'inactive', 'waiting', 'blocked', 'waiting', 'running', 'completed'
+        ]
     )
 
     assert_task_completed(
-        task3,
-        ['inactive', 'waiting', 'blocked', 'waiting', 'running', 'completed']
+        task3, [
+            'inactive', 'waiting', 'blocked', 'waiting', 'running', 'completed'
+        ]
     )
 
 
@@ -330,7 +329,7 @@ def test_callbacks_during_retries(qtbot: QtBot, app: TQManager):
     task = (
         TaskBuilder('CallbackTask')
         .with_event(lambda t: failure_controller(t, fail_if=lambda: failing_task(t)))
-        .with_retry_failed(3)
+        .with_retry(3, delay_seconds=0)
         .with_on_start(lambda t: record_callback('on_start'))
         .with_on_failed(lambda t: record_callback('on_failed'))
         .with_on_completed(lambda t: record_callback('on_completed'))
@@ -345,9 +344,7 @@ def test_callbacks_during_retries(qtbot: QtBot, app: TQManager):
 
     # The expected sequence of callbacks:
     expected_sequence = [
-        'execute', 'on_start',
-        'execute', 'on_start',
-        'execute', 'on_start', 'on_completed', 'on_finish'
+        'execute', 'on_start', 'execute', 'execute', 'on_completed', 'on_finish'
     ]
 
     assert callback_sequence == expected_sequence

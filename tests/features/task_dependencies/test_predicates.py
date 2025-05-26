@@ -25,7 +25,7 @@ def test_predicate_blocks_task_execution(qtbot: QtBot, app: TQManager):
     task = (
         TaskBuilder('PredicateTask')
         .with_event(lambda t: t.log('This should never execute'))
-        .with_predicate(lambda: predicate_condition, max_retries=0, retry_interval_ms=0)
+        .with_predicate(lambda: predicate_condition, max_attempts=0, delay_ms=0)
         .build()
     )
 
@@ -59,8 +59,8 @@ def test_predicate_blocks_until_condition_met(qtbot: QtBot, app: TQManager):
         .with_event(lambda t: t.log('Task executed successfully'))
         .with_predicate(
             lambda: next(counter) == 2,
-            max_retries=3,
-            retry_interval_ms=0)
+            max_attempts=3,
+            delay_ms=0)
         .build()
     )
 
@@ -111,8 +111,8 @@ def test_predicate_for_task_with_parent(qtbot: QtBot, app: TQManager):
         .with_wait_for(task1)
         .with_predicate(
             lambda: next(counter) == 3,
-            max_retries=5,
-            retry_interval_ms=100)
+            max_attempts=5,
+            delay_ms=100)
         .build()
     )
 

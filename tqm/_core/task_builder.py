@@ -9,9 +9,10 @@ from PySide2.QtCore import Qt
 from .task import TaskUnit, TaskGroup, TaskExecutable
 from ..utils import RandomColor
 from ..typings import RGBA, TASK_COLOR
+from .retry_policy import RetryPolicy, NoRetryPolicy, fixed_retry
 from .task_actions import TaskAction, TaskActionVisibility
 from .task_options import ProgressMode, ProgressBarOptions
-from .task_callbacks import TaskCallbacks
+from .task_callbacks import TaskCallbacks, CallbackConfig
 from .task_predicate import TaskPredicate
 
 TaskType = TypeVar('TaskType', TaskExecutable, TaskGroup)
@@ -32,18 +33,18 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
 
         self.parent: Optional[TaskUnit] = None
 
-        self.predicate: Optional[Callable[..., bool]] = None
-        self.retry_interval_ms = 2000
-        self.predicate_retries = 10
+        self.predicate_condition: Optional[Callable[..., bool]] = None
+        self.predicate_delay_ms = 2000
+        self.predicate_max_attempts = 10
 
-        self.max_retry_failed_attempts = 0
+        self.retry_policy = NoRetryPolicy()
 
         self.data: Dict[str, Any] = {}
 
-        self.on_start: Optional[Callable[[TaskType], Any]] = None
-        self.on_finish: Optional[Callable[[TaskType], Any]] = None
-        self.on_completed: Optional[Callable[[TaskType], Any]] = None
-        self.on_failed: Optional[Callable[[TaskType], Any]] = None
+        self.on_start: Optional[CallbackConfig[TaskType]] = None
+        self.on_finish: Optional[CallbackConfig[TaskType]] = None
+        self.on_completed: Optional[CallbackConfig[TaskType]] = None
+        self.on_failed: Optional[CallbackConfig[TaskType]] = None
 
         self._random_color = RandomColor()
         self._actions: List[TaskAction[TaskType]] = []
@@ -67,23 +68,39 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         self.parent = parent
         return self
 
-    def with_retry_failed(self: Builder, max_retries: int = 0) -> Builder:
-        """Automatically retry the task if it fails.
+    def with_retry_policy(self: Builder, policy: RetryPolicy) -> Builder:
+        """Sets the retry policy for the task builder.
 
-        >>> with_retry_on_failed(max_retries=5)
+        >>> from tqm.retry_policy import ConditionalRetryPolicy, LinearOffset
+        >>> my_policy = ConditionalRetryPolicy(max_attempts=5, LinearOffset(delay_seconds=5))
+        >>> with_retry_policy(my_policy)
 
-        TODO: Add delay between retries
+        TODO: Add documentation about custom policy.
+        """
+        self.retry_policy = policy
+        return self
+
+    def with_retry(
+        self: Builder,
+        max_attempts: int = 3,
+        delay_seconds: int = 5,
+    ) -> Builder:
+        """Automatically retry the task if it fails on a fixed delay interval.
+
+        For more advance retry features, use the `with_retry_policy`
+
+        >>> with_retry(max_attempts=5)
 
         """
-        self.max_retry_failed_attempts = max_retries
+        self.retry_policy = fixed_retry(max_attempts, delay_seconds)
         return self
 
     def with_predicate(
         self: Builder,
-        predicate: Callable[..., bool],
+        condition: Callable[..., bool],
         *,
-        max_retries: int = 2,
-        retry_interval_ms: int = 2000
+        max_attempts: int = 2,
+        delay_ms: int = 2000
     ) -> Builder:
         """Predicate to be executed before the task is started.
 
@@ -94,9 +111,9 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         `retry_interval_ms` milliseconds.
 
         """
-        self.predicate = predicate
-        self.retry_interval_ms = retry_interval_ms
-        self.predicate_retries = max_retries
+        self.predicate_condition = condition
+        self.predicate_delay_ms = delay_ms
+        self.predicate_max_attempts = max_attempts
         return self
 
     def with_action(
@@ -141,48 +158,95 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         self._actions.append(TaskAction[TaskType]('%file%', lambda _: file, visibility))
         return self
 
-    def with_on_start(self: Builder, on_start: Callable[[TaskType], Any], *args: Any, **kwargs: Any) -> Builder:
-        """Callback to be executed before the task is started.
+    def with_on_start(
+        self: Builder,
+        on_start: Callable[[TaskType], Any],
+        cleanup: bool = True
+    ) -> Builder:
+        """Callback to be executed when the task begins its lifecycle.
 
-        >>> with_on_start(lambda task: print(task.name))
+        Args:
+            on_start: Function to call when task starts. Receives the task as first argument.
+            cleanup: If True (default), callback fires only once per task lifecycle.
+                    If False, callback fires on each retry attempt.
 
-        NOTE: The first argument is the task itself.
+        Examples:
+            >>> with_on_start(lambda task: task.log('Task starting'))
+            >>> with_on_start(lambda task: setup_resources(task), cleanup=False)  # Fire on each retry
 
+        Note:
+            The callback receives the task instance as its first argument.
         """
-        self.on_start = on_start
+        self.on_start = CallbackConfig(on_start, cleanup)
         return self
 
-    def with_on_failed(self: Builder, on_failed: Callable[[TaskType], Any]) -> Builder:
-        """Callback to be executed if the task fails.
+    def with_on_failed(
+        self: Builder,
+        on_failed: Callable[[TaskType], Any],
+        cleanup: bool = False
+    ) -> Builder:
+        """Callback to be executed each time the task fails.
 
-       >>> with_on_failed(lambda task: print(f'Error in {task.name}'))
+        Args:
+            on_failed: Function to call when task fails. Receives the task as first argument.
+            cleanup: If True, callback fires only on the first failure.
+                    If False (default), callback fires on each failed attempt.
 
-        NOTE: The first argument is the task itself.
+        Examples:
+            >>> with_on_failed(lambda task: task.log(f'Attempt failed: {task.exception}'))
+            >>> with_on_failed(lambda task: send_alert(task), cleanup=True)  # Alert only once
 
+        Note:
+            The callback receives the task instance as its first argument.
+            Use task.exception to access the failure reason.
         """
-        self.on_failed = on_failed
+        self.on_failed = CallbackConfig(on_failed, cleanup)
         return self
 
-    def with_on_finish(self: Builder, on_finish: Callable[[TaskType], Any]) -> Builder:
-        """Callback to be executed after the task is finished.
+    def with_on_finish(
+        self: Builder,
+        on_finish: Callable[[TaskType], Any],
+        cleanup: bool = False
+    ) -> Builder:
+        """Callback to be executed after each task attempt completes.
 
-        >>> with_on_finish(lambda task: print(task.name))
+        Args:
+            on_finish: Function to call when task attempt finishes. Receives the task as first argument.
+            cleanup: If True, callback fires only when task permanently finishes.
+                    If False (default), callback fires after each attempt (useful for cleanup).
 
-        NOTE: The first argument is the task itself.
+        Examples:
+            >>> with_on_finish(lambda task: cleanup_temp_files(task))
+            >>> with_on_finish(lambda task: log_final_state(task), cleanup=True)  # Log only at end
 
+        Note:
+            The callback receives the task instance as its first argument.
+            This fires regardless of success or failure.
         """
-        self.on_finish = on_finish
+        self.on_finish = CallbackConfig(on_finish, cleanup)
         return self
 
-    def with_on_completed(self: Builder, on_completed: Callable[[TaskType], Any]) -> Builder:
-        """Callback to be executed when the task is completed.
+    def with_on_completed(
+        self: Builder,
+        on_completed: Callable[[TaskType], Any],
+        cleanup: bool = True
+    ) -> Builder:
+        """Callback to be executed when the task successfully completes.
 
-        >>> with_on_completed(lambda task: print(task.name))
+        Args:
+            on_completed: Function to call when task succeeds. Receives the task as first argument.
+            cleanup: If True (default), callback fires only once when task succeeds.
+                    If False, callback would fire on each successful retry (rarely useful).
 
-        NOTE: The first argument is the task itself.
+        Examples:
+            >>> with_on_completed(lambda task: task.log('Task completed successfully'))
+            >>> with_on_completed(lambda task: save_results(task))
 
+        Note:
+            The callback receives the task instance as its first argument.
+            This only fires on successful completion, not on failure.
         """
-        self.on_completed = on_completed
+        self.on_completed = CallbackConfig(on_completed, cleanup)
         return self
 
     def with_data(self: Builder, **kwargs: Any) -> Builder:
@@ -310,6 +374,7 @@ class TaskBuilder(_TaskBuilderBase['TaskBuilder', TaskExecutable]):
             parent=self.parent,
             color=self.color,
             data=self.data,
+            retry_policy=self.retry_policy,
             progress_bar=ProgressBarOptions(
                 minimum=self.minimum,
                 maximum=self.maximum,
@@ -320,11 +385,10 @@ class TaskBuilder(_TaskBuilderBase['TaskBuilder', TaskExecutable]):
                 )
             ),
             predicate=TaskPredicate(
-                condition=self.predicate,
-                max_retries=self.predicate_retries,
-                retry_interval=self.retry_interval_ms,
+                condition=self.predicate_condition,
+                max_retries=self.predicate_max_attempts,
+                retry_interval=self.predicate_delay_ms,
             ),
-            retry_attempts=self.max_retry_failed_attempts,
             callbacks=TaskCallbacks(
                 on_start=self.on_start,
                 on_finish=self.on_finish,
@@ -364,9 +428,9 @@ class TaskGroupBuilder(_TaskBuilderBase['TaskGroupBuilder', TaskGroup]):
                 mode=ProgressMode.DETERMINATE
             ),
             predicate=TaskPredicate(
-                condition=self.predicate,
-                max_retries=self.predicate_retries,
-                retry_interval=self.retry_interval_ms,
+                condition=self.predicate_condition,
+                max_retries=self.predicate_max_attempts,
+                retry_interval=self.predicate_delay_ms,
             ),
             callbacks=TaskCallbacks(
                 on_start=self.on_start,

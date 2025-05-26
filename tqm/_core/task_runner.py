@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from PySide2.QtCore import Slot, Signal, QObject, QRunnable
 
+from .logger import LOGGER
 from ..exceptions import TaskEventError
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ class GroupRunner(BaseRunner):
 
     @Slot()
     def run(self) -> None:
-
+        LOGGER.debug('%s: Started', self.group.name)
         self.signals.runner_started.emit(self.group)
 
         # add all tasks from the main thread
@@ -60,9 +61,11 @@ class GroupRunner(BaseRunner):
             time.sleep(0.1)  # sleep to avoid CPU thrashing
 
         if all(task.state.is_completed for task in self.group.tasks):
+            LOGGER.debug('%s: Completed', self.group.name)
             self.signals.runner_completed.emit(self.group)
 
         elif any(task.state.is_failed for task in self.group.tasks):
+            LOGGER.debug('%s: Failed. Some tasks failed.', self.group.name)
             self.signals.runner_failed.emit(self.group, TaskEventError('Some tasks failed'))
 
 
@@ -79,11 +82,14 @@ class TaskRunner(BaseRunner):
     def run(self) -> None:
 
         try:
+            LOGGER.debug('%s: Started', self.task.name)
             self.signals.runner_started.emit(self.task)
             self.task.execute(self.task)
 
         except Exception as e:
+            LOGGER.debug('%s: Failed. Exception: %s', self.task.name, str(e))
             self.signals.runner_failed.emit(self.task, e)
 
         else:
+            LOGGER.debug('%s: Completed', self.task.name)
             self.signals.runner_completed.emit(self.task)

@@ -11,6 +11,7 @@ from PySide2.QtGui import QColor
 from .logger import LOGGER, USER_LEVEL
 from .task_state import TaskState
 from .task_runner import BaseRunner
+from .retry_policy import RetryPolicy, NoRetryPolicy
 from .task_actions import TaskAction
 from .task_options import ProgressBarOptions
 from .._ui.task_item import TaskItem
@@ -39,7 +40,7 @@ class TaskBase(Generic[T, W]):
     # attributes
     name: str = ''
     comment: str = ''
-    retry_attempts: int = -1
+    retry_policy: RetryPolicy = field(default_factory=NoRetryPolicy)
     exception: Optional[Exception] = field(init=False, default=None)
 
     # user data container
@@ -62,7 +63,7 @@ class TaskBase(Generic[T, W]):
 
     # relationships
     parent: Optional[TaskUnit] = None
-    children: Set[TaskUnit] = field(init=False, default_factory=set['TqmTaskUnit'])
+    children: Set[TaskUnit] = field(init=False, default_factory=set['TaskUnit'])
 
     # id
     id: uuid.UUID = field(init=False, default_factory=uuid.uuid4)
@@ -80,8 +81,6 @@ class TaskBase(Generic[T, W]):
         if self.parent:
             LOGGER.debug('Adding %s to parent %s', self.name, self.parent.name)
             self.parent.children.add(self)
-
-        self._initial_attempts = self.retry_attempts
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, TaskBase):
@@ -107,15 +106,6 @@ class TaskBase(Generic[T, W]):
                 yield from recurse(child)
         return set(recurse(self))
 
-    def can_retry(self) -> bool:
-        """Check if the task can be retried."""
-        return self.retry_attempts > 0
-
-    def retry(self) -> None:
-        if self.retry_attempts <= 0:
-            raise ValueError('Not enough retry attempts')
-        self.retry_attempts -= 1
-
     def delete(self, comment: str = '') -> None:
         """Mark the task as deleted and clean up resources."""
         self.predicate.delete()
@@ -130,22 +120,20 @@ class TaskBase(Generic[T, W]):
         self.state.set_inactive(comment)
 
         if reset_attempts:
-            self.retry_attempts = self._initial_attempts
+            self.retry_policy.reset()
 
         self.predicate.reset()
         self.exception = None
 
     def set_failed(self, exception: Optional[Exception] = None, comment: str = '') -> None:
-        # XXX should we override previous exception with None?
-        if exception is not None:
-            self.exception = exception
+        self.exception = exception
         self.state.set_failed(comment)
 
     def inspect(self) -> Dict[str, Any]:
         return {
             'name': self.name,
             'id': str(self.id),
-            'retry_attempts': self.retry_attempts,
+            'retry_policy': self.retry_policy.inspect(),
             'parent': str(self.parent or ''),
             'children': [str(child) for child in self.children],
             'data': self.data,

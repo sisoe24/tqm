@@ -355,7 +355,7 @@ class TestGroupRunner:
         retry_task1 = (
             TaskBuilder('RetryTask1')
             .with_event(retry_task)
-            .with_retry_failed(1)  # Allow one retry
+            .with_retry(1, delay_seconds=0)  # Allow one retry
             .build()
         )
 
@@ -385,8 +385,12 @@ class TestGroupRunner:
         assert_task_completed(success_task1)
         assert_task_completed(success_task2)
         assert_task_failed(fail_task1)
-        assert_task_completed(retry_task1, ['inactive', 'waiting',
-                              'running', 'inactive', 'waiting', 'running', 'completed'])
+        assert_task_completed(
+            retry_task1, [
+                'inactive', 'waiting', 'running', 'retrying',
+                'inactive', 'waiting', 'running', 'completed'
+            ]
+        )
 
         # Group should fail because one task failed
         assert_task_failed(group)

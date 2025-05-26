@@ -345,7 +345,7 @@ def test_retry_failed_task(qtbot: QtBot, app: TQManager):
     failed_task = (
         TaskBuilder('FailedTask')
         .with_event(raise_error)
-        .with_retry_failed(1)  # Allow one retry
+        .with_retry(1)  # Allow one retry
         .build()
     )
 

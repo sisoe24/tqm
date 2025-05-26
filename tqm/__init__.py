@@ -19,8 +19,9 @@ except ImportError:
     )
 
 
-from ._main import TQManager
 from . import exceptions
+from ._core import retry_policy
+from ._main import TQManager
 from ._core.task import TaskExecutable, TaskGroup, TaskUnit
 from ._core.task_builder import TaskBuilder, TaskGroupBuilder
 from ._core.task_executor import TaskExecutor
@@ -29,8 +30,9 @@ from .widgets.help_widget import about
 
 
 __all__ = [
-    'write_log',
     'exceptions',
+    'write_log',
+    'retry_policy',
     'TaskExecutable',
     'TaskUnit',
     'TaskGroup',

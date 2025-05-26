@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Tuple, Union, Optional
 from functools import partial
 
@@ -261,7 +262,8 @@ class TaskManagerView(QWidget):
         splitter = QSplitter()
         splitter.addWidget(table_widget)
         splitter.addWidget(self._debug_widget)
-        splitter.setSizes([1000, 0])
+        if os.getenv('DEV_MODE') != '1':
+            splitter.setSizes([100, 0])
 
         layout = QVBoxLayout()
         layout.addWidget(splitter)

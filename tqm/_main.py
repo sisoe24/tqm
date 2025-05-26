@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Callable, Optional, Generator
 from contextlib import contextmanager
 
@@ -69,7 +70,9 @@ class TQManager(QMainWindow):
         splitter = QSplitter(Qt.Vertical)
         splitter.addWidget(self._view)
         splitter.addWidget(self._logs)
-        splitter.setSizes([100, 0])
+
+        if os.getenv('DEV_MODE') != '1':
+            splitter.setSizes([100, 0])
 
         self.setCentralWidget(splitter)
 

@@ -11,6 +11,7 @@ from .task import TaskUnit, TaskExecutable
 from .queue import TasksQueue, TaskNotFoundError
 from .logger import LOGGER
 from .shutdown import ShutdownThread
+from .task_retry import RetryHandler
 from ..exceptions import (TaskError, TaskParentError, TaskAlreadyInQueue,
                           TaskPredicateError)
 from .task_runner import RunnerSignals
@@ -120,7 +121,7 @@ class _ExecutorCallbacks(RunnerSignals):
 
 class _ExecutorBlocker(QObject):
     predicate_successful = Signal(object)
-    predicate_failed = Signal(object)
+    predicate_failed = Signal(object, Exception)
 
     def __init__(self, executor: TaskExecutor, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -137,8 +138,7 @@ class _ExecutorBlocker(QObject):
             self.predicate_successful.emit(task)
 
         elif predicate_event == PredicateEventType.FAIL:
-            task.exception = TaskPredicateError(task.name)
-            self.predicate_failed.emit(task)
+            self.predicate_failed.emit(task, TaskPredicateError(task.name))
 
         elif predicate_event == PredicateEventType.RETRY:
             task.state.set_retrying(f'Attempts left: {task.predicate.retry_left}')
@@ -267,6 +267,8 @@ class TaskExecutor(QObject):
         self._blocker.predicate_failed.connect(self._on_task_failed)
         self._blocker.predicate_successful.connect(self._predicate_success)
 
+        self.retry_handler = RetryHandler(self.retry_task)
+
         self.registry: Set[TaskUnit] = set()
 
         self._is_shutting_down = False
@@ -333,7 +335,6 @@ class TaskExecutor(QObject):
             DeferredTaskNotFound: If the task is not found in the deferred queue.
 
         """
-        task.retry_attempts -= 1
 
         task.reset('Reset & Retry')
 
@@ -351,7 +352,7 @@ class TaskExecutor(QObject):
         self._start_worker()
 
     @Slot(object)
-    def _on_task_failed(self, task: TaskUnit, exception: Optional[Exception] = None) -> None:
+    def _on_task_failed(self, task: TaskUnit, exception: Exception) -> None:
         """Handle a failed task.
 
         If the task can be retried, it will be re-added to the queue.
@@ -360,14 +361,13 @@ class TaskExecutor(QObject):
             str: The exception message if any
 
         """
-        if task.can_retry():
-            self.retry_task(task)
+        if self.retry_handler.handle_failure(task, exception):
             return
 
         LOGGER.error(f'{task.name} failed: {exception}')
 
-        if task.callbacks.on_finish:
-            task.callbacks.on_finish(task)
+        task.callbacks.execute_on_failed(task)
+        self._on_task_finished(task)
 
         for child in filter(lambda t: t.state.is_blocked, task.children):
             self._on_task_failed(child, TaskParentError(f'Parent {task.name} failed.'))
@@ -377,16 +377,12 @@ class TaskExecutor(QObject):
 
         task.set_failed(exception, str(exception))
 
-        self._on_task_finished(task)
-
     @Slot(object)
     def _on_task_completed(self, task: TaskUnit, *, autostart: bool = True) -> None:
         task.state.set_completed()
         LOGGER.info(f'{task.name} completed')
 
-        if task.callbacks.on_completed:
-            task.callbacks.on_completed(task)
-
+        task.callbacks.execute_on_completed(task)
         self._on_task_finished(task)
 
         self.callbacks.runner_completed.emit(task)
@@ -400,17 +396,13 @@ class TaskExecutor(QObject):
 
     @Slot(object)
     def _on_task_started(self, task: TaskUnit) -> None:
-        if task.callbacks.on_start:
-            task.callbacks.on_start(task)
-
+        task.callbacks.execute_on_start(task)
         self.callbacks.runner_started.emit(task)
         task.state.set_running()
 
     @Slot(object)
     def _on_task_finished(self, task: TaskUnit) -> None:
-        if task.callbacks.on_finish:
-            task.callbacks.on_finish(task)
-
+        task.callbacks.execute_on_finish(task)
         self.callbacks.task_finished.emit(task)
 
     @Slot(list)

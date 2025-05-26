@@ -39,6 +39,7 @@ class RandomColor:
     max_colors: int = 500
 
     colors: OrderedDict[str, QColor] = field(default_factory=OrderedDict[str, QColor], init=False)
+    exclude_colors: list[str] = field(default_factory=list[str])
 
     def generate(self) -> QColor:
 
@@ -46,6 +47,9 @@ class RandomColor:
             r, g, b = (randint(self.min_value, self.max_value) for _ in range(3))
 
             color = QColor(r, g, b, self.alpha)
+
+            if color.name() in self.exclude_colors:
+                continue
 
             if color.name() not in self.colors:
 

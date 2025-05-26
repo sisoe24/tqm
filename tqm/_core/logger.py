@@ -15,17 +15,17 @@ if TYPE_CHECKING:
 USER_LEVEL = 25
 logging.addLevelName(USER_LEVEL, 'USER')
 
-LOG_FILE_FORMAT = logging.Formatter(' - '.join([
+LOG_FILE_FORMAT = logging.Formatter(' | '.join([
     '%(asctime)s',
     '%(levelname)-8s',
-    '%(threadName)s ID:%(thread)-15d',
+    '%(threadName)-10s ID:%(thread)-15d',
     '%(message)s'
 ]), '%Y-%m-%d %H:%M:%S')
 
-LOG_WIDGET_FORMAT = logging.Formatter(' - '.join([
+LOG_WIDGET_FORMAT = logging.Formatter(' | '.join([
     '%(asctime)s',
     '%(levelname)-8s',
-    '%(threadName)s ID:%(thread)-15d',
+    '%(threadName)-10s ID:%(thread)-15d',
     '%(message)s'
 ]), '%H:%M:%S')
 
