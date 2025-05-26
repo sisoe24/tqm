@@ -175,7 +175,6 @@ This application was designed under the OS **dark theme** using Qt's **Fusion** 
 
 The application provides a style.qss file in the default config location which users can modify to customize the appearance of common widgets:
 
-- `TqmTabsWidget`
 - `TqmHeaderView`
 - `TqmTasksLogs`
 - `TqmTasksViewToolbar`
