@@ -57,7 +57,7 @@ QTreeView#TqmTasksTreeView {
     border: none;
     selection-color: #ffffff;
     outline: none;
-    font-size: 14px;
+    font-size: 12px;
 }
 
 QTreeView#TqmTasksTreeView::item {
