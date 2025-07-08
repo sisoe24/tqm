@@ -16,7 +16,7 @@ Basically, a Task Queue Manager.
   - Run multiple tasks in parallel (multi-threaded)
   - Create task groups with parent-child relationships
   - Set dependencies so tasks wait for others to finish
-  - Retry tasks automatically if they fail
+  - Various retry strategies including delays, conditional logic, and custom policies
 
 - **UI Features**
   - Progress bars (both determinate and indeterminate)
