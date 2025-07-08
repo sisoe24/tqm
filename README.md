@@ -2,7 +2,7 @@
 
 A simple PySide2 no-dependency framework for managing and executing tasks in parallel with a nice UI. Helps you create, queue, and track multiple tasks with dependencies and progress reporting.
 
-![demo](resources/images/tqm-demo.gif)
+![demo](resources/images/demo.gif)
 
 ## What is this?
 
