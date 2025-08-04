@@ -8,7 +8,7 @@ from PySide2.QtCore import Qt
 from PySide2.QtWidgets import QWidget, QSplitter, QMainWindow, QMessageBox
 
 from ._core.task import TaskUnit, TaskGroup, TaskExecutable
-from ._core.logger import LOGGER, WidgetLogHandler, log_file_handler
+from ._core.logger import LOGGER, WidgetLogHandler, write_log, log_file_handler
 from ._ui.tab_logs import TasksLog
 from ._core.settings import get_qss_path, open_settings, get_config_path
 from ._ui.ui_controller import TaskManagerController, _TaskButtonsController
@@ -98,6 +98,14 @@ class TQManager(QMainWindow):
     def remove_tasks(self, *tasks: TaskUnit) -> None:
         for task in tasks:
             self.executor.remove_task(task)
+
+    def log(self, text: str) -> None:
+        """Log a message to the console
+        ```
+        task_manager.log("Polling started...")
+        ```
+        """
+        write_log(text)
 
     def add_tasks(self, *tasks: TaskUnit) -> None:
         """Add a group of tasks to the queue.
