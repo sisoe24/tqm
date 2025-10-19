@@ -6,6 +6,7 @@ from typing import Any, Set, Dict, List, Callable, Optional
 from functools import partial
 
 from PySide2.QtCore import Qt, Slot, QTimer, Signal, QObject
+from PySide2.QtWidgets import QMessageBox
 
 from .task import TaskUnit, TaskExecutable
 from .queue import TasksQueue, TaskNotFoundError
@@ -468,8 +469,20 @@ class TaskExecutor(QObject):
         Note: Workers will complete their current tasks before shutting down.
         A new thread handles the shutdown.
 
+        The user will be prompted for confirmation before proceeding.
+        In-progress tasks will not be forcibly terminated.
+
         """
         if not self.status_tracker.running_tasks:
+            return
+
+        if QMessageBox.question(
+            None,
+            'Shutdown',
+            'Are you sure you want to shutdown the task manager? '
+            'In-progress tasks will be allowed to finish, but no new tasks will be started.',
+            QMessageBox.Yes | QMessageBox.No
+        ) != QMessageBox.Yes:
             return
 
         LOGGER.info('Removing all tasks from queue and waiting for workers to finish...')

@@ -173,13 +173,4 @@ class TQManager(QMainWindow):
 
     def shutdown(self) -> None:
         """Shutdown the workers."""
-        if QMessageBox.question(
-            None,
-            'Shutdown',
-            'Are you sure you want to shutdown the workers? '
-            'Note: In-progress tasks will not be terminated.',
-            QMessageBox.Yes | QMessageBox.No
-        ) != QMessageBox.Yes:
-            return
-
         self.executor.shutdown()

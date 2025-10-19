@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v0.3.0 (2025-05-26)
+
+### Added
+
+- Modifiable system idle timeout from the TQManager class init arguments
+- Expose `write_log` into main TQManager class via the `log` method.
+
 ## v0.2.0 (2025-05-26)
 
 ### Added
