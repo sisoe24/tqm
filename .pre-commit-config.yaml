@@ -26,3 +26,9 @@ repos:
     - pre-push
   repo: https://github.com/commitizen-tools/commitizen
   rev: v4.8.2
+- hooks:
+  - args:
+    - --select=F811
+    id: ruff
+  repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.6.9
