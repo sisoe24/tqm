@@ -102,6 +102,10 @@ def test_task_builder_random_color():
     assert t.color != TaskBuilder('abc').build().color
 
 
+def test_task_builder_invalid_color_name_gets_a_random_color():
+    assert TaskBuilder('abc').with_color('not a color').build().color.isValid()
+
+
 def test_task_builder_with_retry():
     t = TaskBuilder('abc').with_retry(max_attempts=4, delay_seconds=7).build()
 

@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from tqm._core.settings import Settings, open_settings, get_config_path
+from tqm._core.settings import (Settings, get_qss_path, open_settings,
+                               get_config_path)
 
 
 def test_windows_path(monkeypatch: pytest.MonkeyPatch):
@@ -129,3 +130,25 @@ def test_open_settings_read_write(mock_settings: Path):
     with mock_settings.open() as s:
         data = json.load(s)
         assert data['wrap_lines'] == False
+
+
+def test_open_settings_writes_defaults_for_a_new_file(tmp_path: Path):
+    f = tmp_path / 'settings.json'
+
+    with open_settings(json_file_path=f):
+        pass
+
+    assert json.loads(f.read_text())['max_workers'] == Settings().max_workers
+
+
+def test_qss_path_uses_the_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv('TQM_QSS_PATH', '/fake/style.qss')
+
+    assert get_qss_path(tmp_path) == Path('/fake/style.qss')
+
+
+def test_qss_path_keeps_the_user_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv('TQM_QSS_PATH', raising=False)
+    (tmp_path / 'style.qss').write_text('mine')
+
+    assert get_qss_path(tmp_path).read_text() == 'mine'
