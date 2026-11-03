@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, Set
+import os
+import json
+from typing import Any, Set, List
+from pathlib import Path
 
 import pytest
 from PySide2.QtCore import Qt, QModelIndex, QItemSelectionModel
 from pytestqt.qtbot import QtBot
 from PySide2.QtWidgets import QLineEdit
 
-from tqm import TQManager, TaskBuilder
+from tqm import TQManager, TaskBuilder, TaskGroupBuilder
+from tqm._ui.toolbar import TasksViewToolbar
 from tqm._ui.ui_view_model import TaskTreeView
 
 from ..utils import (raise_error, assert_task_failed, failure_controller,
@@ -369,3 +373,46 @@ def test_retry_all_failed(qtbot: QtBot, app: TQManager):
         'inactive', 'waiting', 'running', 'failed',
         'inactive', 'waiting', 'running', 'completed',
     ])
+
+
+def test_retry_all_failed_reaches_group_tasks(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder().with_event(lambda t: failure_controller(t, fail_count=1)).build()
+    group = TaskGroupBuilder('Group').with_tasks(task).build()
+    app.add_tasks(group)
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_failed)
+
+    app.operations.retry_all_failed()
+
+    qtbot.wait_until(lambda: task.state.is_completed)
+
+
+def test_set_max_workers_is_floored_and_saved(app: TQManager):
+    updates: List[int] = []
+    app.operations.max_workers_updated.connect(updates.append)
+
+    app.operations.set_max_workers(1)
+
+    assert updates == [2]
+    assert app.executor.max_workers == 2
+    assert json.loads(Path(os.environ['TQM_SETTINGS_PATH']).read_text())['max_workers'] == 2
+
+
+def test_run_all_button_starts_the_tasks(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder().build()
+    app.add_tasks(task)
+
+    app.findChild(TasksViewToolbar).run_all_tasks.click()
+
+    qtbot.wait_until(lambda: task.state.is_completed)
+
+
+def test_retry_all_button_retries_failed_tasks(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder().with_event(lambda t: failure_controller(t, fail_count=1)).build()
+    app.add_tasks(task)
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_failed)
+
+    app.findChild(TasksViewToolbar).retry_all_btn.click()
+
+    qtbot.wait_until(lambda: task.state.is_completed)
