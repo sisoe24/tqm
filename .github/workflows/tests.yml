@@ -30,6 +30,9 @@ jobs:
           poetry env use python
           poetry install --no-interaction
 
+      - name: Compile resources
+        run: poetry run python scripts/compile_resources.py
+
       - name: Run tests
         run: poetry run pytest -p no:cacheprovider -q
 
