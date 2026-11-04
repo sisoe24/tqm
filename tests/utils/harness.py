@@ -39,6 +39,11 @@ class StepPool(ThreadPoolInterface):
         self.pending.pop(0)
         QApplication.processEvents()
 
+    def drain(self) -> None:
+        """Run every started runnable, and the ones that they start."""
+        while self.pending:
+            self.step()
+
 
 def assert_script_passes(script: Path, timeout: float = 30) -> None:
     """Run a script that may poison the process. A crash or a hang is an AssertionError."""

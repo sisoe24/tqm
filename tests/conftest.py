@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import os
 import threading
 import faulthandler
@@ -10,7 +11,7 @@ from unittest import mock
 import pytest
 from PySide2.QtCore import QEvent
 from pytestqt.qtbot import QtBot
-from PySide2.QtWidgets import QApplication
+from PySide2.QtWidgets import QWidget, QApplication
 
 from tqm import TQManager
 from tqm._core.logger import LOGGER
@@ -53,13 +54,22 @@ def _release_gates() -> None:
         _open_gates.pop().set()
 
 
+def _delete_now(widget: QWidget) -> None:
+    # A pending settings-save timer must not fire in a later test.
+    widget.close()
+    widget.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
 @pytest.fixture(autouse=True)
 def isolate_global_state(tmp_path: Path) -> Generator[None, Any, None]:
     """Keep each test away from the real config dir and from the state of other tests.
 
     The patch restores env vars that the code writes directly. Delete the Settings
-    part at R9 and the LOGGER part at R10, or they will mask regressions.
+    part at R9, the LOGGER part at R10 and the gc part at R5, or they will mask regressions.
     """
+    # V1: GC on a worker thread segfaults once dropped managers pile up. Its script covers it.
+    gc.disable()
     handlers = list(LOGGER.handlers)
     widget_handler = LOGGER.widget
     Settings._instance = None
@@ -76,6 +86,8 @@ def isolate_global_state(tmp_path: Path) -> Generator[None, Any, None]:
         LOGGER.removeHandler(handler)
         handler.close()
     LOGGER.handlers[:] = handlers
+    gc.collect()
+    gc.enable()
 
 
 @pytest.fixture
@@ -118,7 +130,19 @@ def app(
     # waitForDone would block the main-thread slots that a running group needs.
     qtbot.wait_until(lambda: widget.executor._threadpool.activeThreadCount() == 0, timeout=5000)
 
-    # Delete now: a pending settings-save timer must not fire in a later test.
-    widget.close()
-    widget.deleteLater()
-    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    _delete_now(widget)
+
+
+@pytest.fixture
+def make_manager() -> Generator[Callable[[str], TQManager], Any, None]:
+    """Create extra managers, for tests that need their own settings or several windows."""
+    widgets: List[TQManager] = []
+
+    def make(app_name: str) -> TQManager:
+        widgets.append(TQManager(app_name))
+        return widgets[-1]
+
+    yield make
+
+    for widget in widgets:
+        _delete_now(widget)

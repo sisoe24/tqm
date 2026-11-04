@@ -1,33 +1,44 @@
 from __future__ import annotations
 
-from typing import Optional
+import os
+import json
+from typing import Any, Set, List
+from pathlib import Path
 
-from PySide2.QtCore import Qt, QItemSelectionModel
+import pytest
+from PySide2.QtCore import Qt, QModelIndex, QItemSelectionModel
 from pytestqt.qtbot import QtBot
+from PySide2.QtWidgets import QLineEdit
 
-from tqm import TQManager, TaskBuilder
+from tqm import TQManager, TaskBuilder, TaskGroupBuilder
+from tqm._ui.toolbar import TasksViewToolbar
 from tqm._ui.ui_view_model import TaskTreeView
 
 from ..utils import (raise_error, assert_task_failed, failure_controller,
                      assert_task_completed)
 
 
-def select_task(view: TaskTreeView, row_index: int, child_index: Optional[int] = None):
-    """Helper method for testing that selects a specific row.
+def find_row(view: TaskTreeView, name: str) -> QModelIndex:
+    """Find the row of a task or a group child by its name."""
+    model = view.model()
+    flags = Qt.MatchExactly | Qt.MatchRecursive
+    return model.match(model.index(0, 0), Qt.DisplayRole, name, 1, flags)[0]
 
-    Args:
-        view: The TreeView containing the tasks
-        row_index: The row index of the task or group
-        child_index: If provided, selects a child task within a group at the given row_index
-    """
-    if child_index is None:
-        # Select a top-level task
-        index = view.proxy_model.index(row_index, 0)
-    else:
-        # Select a child task within a group
-        parent_index = view.proxy_model.index(row_index, 0)
-        index = view.proxy_model.index(child_index, 0, parent_index)
 
+def row_names(view: TaskTreeView) -> Set[str]:
+    """Get the name of every visible row, group children included."""
+    model = view.model()
+    flags = Qt.MatchWildcard | Qt.MatchRecursive
+    return {i.data() for i in model.match(model.index(0, 0), Qt.DisplayRole, '*', -1, flags)}
+
+
+def cell_data(view: TaskTreeView, name: str, column: str) -> Any:
+    return find_row(view, name).siblingAtColumn(view.get_column_index(column)).data()
+
+
+def select_task(view: TaskTreeView, name: str):
+    """Helper method for testing that selects the row of a task by its name."""
+    index = find_row(view, name)
     view.selectionModel().select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
 
 
@@ -41,7 +52,7 @@ def test_add_task_to_view(qtbot: QtBot, app: TQManager):
 
     # Verify the task was added to the view
     assert task.item is not None
-    assert task in app._controller.get_all_tasks()
+    assert row_names(app.findChild(TaskTreeView)) == {'ViewTask'}
 
 
 def test_remove_task_from_view(qtbot: QtBot, app: TQManager):
@@ -51,11 +62,12 @@ def test_remove_task_from_view(qtbot: QtBot, app: TQManager):
     app.add_tasks(task)
 
     # Verify task is in view
-    assert task.item is not None
+    view = app.findChild(TaskTreeView)
+    assert row_names(view) == {'RemoveTask'}
 
     # Remove the task
     app.remove_tasks(task)
-    assert task not in app._controller.get_all_tasks()
+    assert not row_names(view)
 
 
 def test_selected_task_removal(qtbot: QtBot, app: TQManager):
@@ -66,17 +78,14 @@ def test_selected_task_removal(qtbot: QtBot, app: TQManager):
     app.add_tasks(task1, task2)
 
     # Select task1
-    view = app._view.tree_view
-    select_task(view, 1)
+    view = app.findChild(TaskTreeView)
+    select_task(view, 'Task1')
 
     # Emit signal to remove selected tasks
     view.selected_task_removed.emit()
 
-    # Verify task1 was removed
-    assert task1 not in app._controller.get_all_tasks()
-
-    # Verify task1 was not removed
-    assert task2 in app._controller.get_all_tasks()
+    # Verify only task1 was removed
+    assert row_names(view) == {'Task2'}
 
 
 def test_selected_multi_task_removal(qtbot: QtBot, app: TQManager):
@@ -84,18 +93,17 @@ def test_selected_multi_task_removal(qtbot: QtBot, app: TQManager):
     # Create and add tasks
     task1 = TaskBuilder('Task1').build()
     task2 = TaskBuilder('Task2').build()
-    app.add_tasks(task1, task2)
+    task3 = TaskBuilder('Task3').build()
+    app.add_tasks(task1, task2, task3)
 
-    # Select task1
-    view = app._view.tree_view
-    select_task(view, 0)
-    select_task(view, 1)
+    view = app.findChild(TaskTreeView)
+    select_task(view, 'Task1')
+    select_task(view, 'Task2')
 
     # Emit signal to remove selected tasks
     view.selected_task_removed.emit()
 
-    assert task1 not in app._controller.get_all_tasks()
-    assert task2 not in app._controller.get_all_tasks()
+    assert row_names(view) == {'Task3'}
 
 
 def test_selected_child_task_removal(qtbot: QtBot, app: TQManager):
@@ -108,19 +116,13 @@ def test_selected_child_task_removal(qtbot: QtBot, app: TQManager):
     app.add_tasks(task1, task2, task3, task4)
 
     # Select task1
-    view = app._view.tree_view
-    first_task_index = 3
-    select_task(view, first_task_index)
+    view = app.findChild(TaskTreeView)
+    select_task(view, 'Task1')
 
     # Emit signal to remove selected tasks
     view.selected_task_removed.emit()
 
-    all_tasks = app._controller.get_all_tasks()
-
-    assert task1 not in all_tasks
-    assert task2 not in all_tasks
-    assert task3 not in all_tasks
-    assert task4 in all_tasks
+    assert row_names(view) == {'Task4'}
 
 
 def test_update_task_progress(qtbot: QtBot, app: TQManager):
@@ -134,19 +136,9 @@ def test_update_task_progress(qtbot: QtBot, app: TQManager):
     # Simulate progress update
     task.emit_progress(75)
 
-    # Verify progress was updated in view
-    model = app._view.tree_view.tasks_model
-    progress_column = model.columns['Progress']
-
-    tasks = app._controller.get_all_tasks()
-    assert tasks, 'Ui should contain one task'
-
-    task_item = task.item
-    assert task_item, 'Task object should have an item assigned'
-
     # Check progress value
-    progress_item = model.item(task_item.row(), progress_column)
-    assert progress_item.data(Qt.DisplayRole) == 75, 'Progress should be updated to 75'
+    view = app.findChild(TaskTreeView)
+    assert cell_data(view, 'ProgressTask', 'Progress') == 75, 'Progress should be updated to 75'
 
 
 def test_clear_completed_tasks(qtbot: QtBot, app: TQManager):
@@ -158,15 +150,13 @@ def test_clear_completed_tasks(qtbot: QtBot, app: TQManager):
     # Add tasks
     app.add_tasks(completed_task, error_task)
 
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: completed_task.state.is_completed and error_task.state.is_failed)
 
     # Clear completed tasks
-    app._controller.ops.clear_completed_tasks()
+    app.operations.clear_completed_tasks()
 
-    all_tasks = app._controller.get_all_tasks()
-    assert completed_task not in all_tasks
-    assert error_task in all_tasks
+    assert row_names(app.findChild(TaskTreeView)) == {'ErrorTask'}
 
 
 def test_clear_all_tasks(qtbot: QtBot, app: TQManager):
@@ -177,76 +167,84 @@ def test_clear_all_tasks(qtbot: QtBot, app: TQManager):
     app.add_tasks(task1, task2)
 
     # Clear all tasks
-    app._controller.ops.clear_all_tasks()
+    app.operations.clear_all_tasks()
 
     # Verify all tasks were removed
-    assert not app._controller.get_all_tasks()
+    assert not row_names(app.findChild(TaskTreeView))
 
 
 def test_clear_all_waiting_tasks(qtbot: QtBot, app: TQManager):
     """Test clearing all waiting tasks."""
     # Create and add tasks
     task1 = TaskBuilder('Task1').build()
-    task2 = TaskBuilder('Task2').build()
+    task2 = TaskBuilder('Task2').with_event(raise_error).build()
     app.add_tasks(task1, task2)
 
-    # Clear all waiting tasks
-    app._controller.ops.clear_waiting_tasks()
+    app.start_workers()
+    qtbot.wait_until(lambda: task2.state.is_failed and task1.state.is_completed)
 
-    # Verify all tasks were removed
-    assert not app._controller.get_all_tasks()
+    task3 = TaskBuilder('Task3').build()
+    app.add_tasks(task3)
+
+    # Clear all waiting tasks
+    app.operations.clear_waiting_tasks()
+
+    assert row_names(app.findChild(TaskTreeView)) == {'Task1', 'Task2'}
 
 
 def test_clear_all_failed_tasks(qtbot: QtBot, app: TQManager):
     """Test clearing all failed tasks."""
     # Create and add tasks
-    task1 = TaskBuilder('Task1').build()
+    task1 = TaskBuilder('Task1').with_event(lambda t: None).build()
     task2 = TaskBuilder('Task2').with_event(raise_error).build()
     task3 = TaskBuilder('Task3').with_event(raise_error).build()
     app.add_tasks(task1, task2, task3)
 
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(
+        lambda: task1.state.is_completed and task2.state.is_failed and task3.state.is_failed
+    )
 
-    # Clear all tasks
-    app._controller.ops.clear_failed_tasks()
+    # Clear all failed tasks
+    app.operations.clear_failed_tasks()
 
-    # Verify all tasks were removed
-    all_tasks = app._controller.get_all_tasks()
-    assert task1 in all_tasks
-    assert task2 not in all_tasks
-    assert task3 not in all_tasks
+    assert row_names(app.findChild(TaskTreeView)) == {'Task1'}
 
 
 def test_ui_callbacks_on_task_state_changes(qtbot: QtBot, app: TQManager):
     """Test UI callbacks on task state changes."""
     # Create a task
-    task = TaskBuilder('CallbackTask').build()
+    task = TaskBuilder('CallbackTask').with_event(lambda t: None).build()
 
     # Add to manager
     app.add_tasks(task)
 
     # Verify the task item has no start time initially
-    model = app._view.tree_view.tasks_model
-    started_column = model.columns['Started']
-    completed_column = model.columns['Completed']
-
-    row = 0
-    assert model.item(row, started_column).text() == '', 'Start time should be empty initially'
-    assert model.item(row, completed_column).text(
-    ) == '', 'Completion time should be empty initially'
+    view = app.findChild(TaskTreeView)
+    assert cell_data(view, 'CallbackTask', 'Started') == '', 'Start time should be empty initially'
+    assert cell_data(view, 'CallbackTask', 'Completed') == '', \
+        'Completion time should be empty initially'
 
     app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_completed)
 
-    # Start the task
-    with qtbot.wait_signal(app.executor.callbacks.runner_completed):
-        task.state.set_completed()
+    # V19 covers which entry Started should be: test_started_column_shows_running_timestamp
+    history = [entry.timestamp for entry in task.state.history]
+    assert cell_data(view, 'CallbackTask', 'Started') in history
 
-    # Verify start time was updated
-    assert model.item(row, started_column).text() != '', 'Start time should be set'
+    assert cell_data(view, 'CallbackTask', 'Completed') == task.state.get_last().timestamp
 
-    # # Verify completion time was updated
-    assert model.item(row, completed_column).text() != '', 'Completion time should be set'
+
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V19')
+def test_started_column_shows_running_timestamp(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder('StartedTask').with_event(lambda t: None).build()
+    app.add_tasks(task)
+
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_completed)
+
+    running = [e.timestamp for e in task.state.history if e.active_state == 'running']
+    assert cell_data(app.findChild(TaskTreeView), 'StartedTask', 'Started') == running[0]
 
 
 def test_search_functionality(qtbot: QtBot, app: TQManager):
@@ -258,120 +256,97 @@ def test_search_functionality(qtbot: QtBot, app: TQManager):
     app.add_tasks(task1, task2, task3)
 
     # Set search filter
-    app._view.toolbar.search_bar.setText('Apple')
+    search_bar = app.findChild(QLineEdit, 'TqmSearchBar')
+    search_bar.setText('Apple')
 
     # Check that only AppleTask is visible
-    view = app._view.tree_view
-    assert view.proxy_model.rowCount() == 1, 'Only one task should be visible'
-
-    visible_task = view.proxy_model.index(0, 0).data(Qt.UserRole)
-    assert visible_task == task1, 'Only AppleTask should be visible'
+    view = app.findChild(TaskTreeView)
+    assert row_names(view) == {'AppleTask'}, 'Only AppleTask should be visible'
 
     # Clear search
-    app._view.toolbar.search_bar.clear()
+    search_bar.clear()
 
     # Verify all tasks are visible again
-    assert view.proxy_model.rowCount() == 3, 'All tasks should be visible'
+    assert row_names(view) == {'AppleTask', 'BananaTask', 'ChocolateTask'}
 
 
 def test_task_group_progress_tracking(qtbot: QtBot, app: TQManager):
     """Test task group progress tracking in UI."""
     # Create a task group
     with app.create_group('ProgressGroup') as group:
-        task1 = group.add_event(lambda t: None, label='GroupTask1')
-        task2 = group.add_event(raise_error, label='GroupTask2')
+        group.add_event(lambda t: None, label='GroupTask1')
+        group.add_event(raise_error, label='GroupTask2')
 
     # Complete one task
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_failed)
 
     # Verify group progress shows 1/2 completed
-    model = app._view.tree_view.tasks_model
-    progress_column = model.columns['Progress']
-
-    # Find the group row
-    group_row = 0  # Assuming it's the first row
-    group_item = model.item(group_row, progress_column)
-    group_progress = group_item.data(Qt.DisplayRole)
-
-    assert group_progress == 1, 'Group progress should show 1 completed task'
+    view = app.findChild(TaskTreeView)
+    assert cell_data(view, 'ProgressGroup', 'Progress') == 1, \
+        'Group progress should show 1 completed task'
 
 
 def test_task_group_remove(qtbot: QtBot, app: TQManager):
     """Test task group should be removed if no has no tasks tracking in UI."""
     # Create a task group
-    task1 = TaskBuilder('Task1').build()
-    task2 = TaskBuilder('Task2').with_wait_for(task1).build()
-    task3 = TaskBuilder('Task3').with_wait_for(task2).build()
-    task4 = TaskBuilder('Task4').build()
+    task1 = TaskBuilder('Task1').with_event(lambda t: None).build()
+    task2 = TaskBuilder('Task2').with_event(lambda t: None).with_wait_for(task1).build()
+    task3 = TaskBuilder('Task3').with_event(lambda t: None).with_wait_for(task2).build()
+    task4 = TaskBuilder('Task4').with_event(lambda t: None).build()
 
-    # group is index 1
     with app.create_group('ProgressGroup') as group:
         group.add_tasks(task1, task2, task3)
 
-    # task4 is index 0 because is the last added
     app.add_tasks(task4)
 
-    # Complete one task
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    # Complete every task
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_completed and task4.state.is_completed)
 
-    view = app._view.tree_view
+    view = app.findChild(TaskTreeView)
 
-    select_task(view, 1, 2)
+    select_task(view, 'Task1')
 
-    selected_tasks = app._controller.get_selected_tasks()
-    assert selected_tasks, 'Should have a selected task'
+    selected_items = view.get_selected_items()
+    assert [item.data(Qt.UserRole).name for item in selected_items] == ['Task1']
 
-    task = selected_tasks[0]
-    assert task.item, 'Task should have a QStandardItem assigned'
-    assert task.name == 'Task1', 'Must selected Task1'
+    view.selected_task_removed.emit()
 
-    app._controller._on_remove_selected_tasks()
-
-    all_tasks = app._controller.get_all_tasks()
-
-    assert len(all_tasks) == 1
-    assert group not in all_tasks
-    assert task1 not in all_tasks
-    assert task2 not in all_tasks
-    assert task3 not in all_tasks
-    assert task4 in all_tasks
+    assert row_names(view) == {'Task4'}
 
 
-def test_retry_failed_task(qtbot: QtBot, app: TQManager):
-    """Test retrying a failed task."""
-    # Create a task that will be marked as failed
-    failed_task = (
-        TaskBuilder('FailedTask')
-        .with_event(raise_error)
-        .with_retry(1)  # Allow one retry
+def test_retry_selected_task(qtbot: QtBot, app: TQManager):
+    """Test retrying the selected failed task leaves other failed tasks alone."""
+    task = (
+        TaskBuilder('SelectedTask')
+        .with_event(lambda t: failure_controller(t, fail_count=1))
         .build()
     )
+    other = TaskBuilder('OtherTask').with_event(raise_error).build()
+    app.add_tasks(task, other)
 
-    # Add to manager
-    app.add_tasks(failed_task)
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_failed and other.state.is_failed)
 
-    # Mark as failed
-    failed_task.state.set_failed('Test failure')
-
-    # Select the failed task
-    view = app._view.tree_view
-    select_task(view, 0)
+    view = app.findChild(TaskTreeView)
+    select_task(view, 'SelectedTask')
 
     # Emit signal to retry
-    view.selected_task_retried.emit(failed_task)
+    view.selected_task_retried.emit(task)
+    qtbot.wait_until(lambda: task.state.is_completed)
 
-    # # Verify task state was reset
-    assert failed_task.state.is_waiting or failed_task.state.is_running, \
-        'Failed task should be reset to waiting or running state'
+    assert_task_completed(task, [
+        'inactive', 'waiting', 'running', 'failed',
+        'inactive', 'waiting', 'running', 'completed',
+    ])
+    assert_task_failed(other)
 
 
-def test_retry_failed_task(qtbot: QtBot, app: TQManager):
-    """Test retrying a failed task."""
-    """Test clearing completed tasks."""
+def test_retry_all_failed(qtbot: QtBot, app: TQManager):
+    """Test retrying all failed tasks."""
     # Create tasks
-    task1 = TaskBuilder('Task1').build()
+    task1 = TaskBuilder('Task1').with_event(lambda t: None).build()
     task2 = TaskBuilder('Task2').with_event(raise_error).build()
     task3 = TaskBuilder('Task3').with_event(
         lambda t: failure_controller(t, fail_count=1)
@@ -380,12 +355,14 @@ def test_retry_failed_task(qtbot: QtBot, app: TQManager):
     # Add tasks
     app.add_tasks(task1, task2, task3)
 
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(
+        lambda: task1.state.is_completed and task2.state.is_failed and task3.state.is_failed
+    )
 
-    # Clear completed tasks
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app._controller.ops.retry_all_failed()
+    # A retried task stops being failed before this call returns
+    app.operations.retry_all_failed()
+    qtbot.wait_until(lambda: task2.state.is_failed and task3.state.is_completed)
 
     assert_task_completed(task1)
     assert_task_failed(task2, [
@@ -396,3 +373,46 @@ def test_retry_failed_task(qtbot: QtBot, app: TQManager):
         'inactive', 'waiting', 'running', 'failed',
         'inactive', 'waiting', 'running', 'completed',
     ])
+
+
+def test_retry_all_failed_reaches_group_tasks(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder().with_event(lambda t: failure_controller(t, fail_count=1)).build()
+    group = TaskGroupBuilder('Group').with_tasks(task).build()
+    app.add_tasks(group)
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_failed)
+
+    app.operations.retry_all_failed()
+
+    qtbot.wait_until(lambda: task.state.is_completed)
+
+
+def test_set_max_workers_is_floored_and_saved(app: TQManager):
+    updates: List[int] = []
+    app.operations.max_workers_updated.connect(updates.append)
+
+    app.operations.set_max_workers(1)
+
+    assert updates == [2]
+    assert app.executor.max_workers == 2
+    assert json.loads(Path(os.environ['TQM_SETTINGS_PATH']).read_text())['max_workers'] == 2
+
+
+def test_run_all_button_starts_the_tasks(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder().build()
+    app.add_tasks(task)
+
+    app.findChild(TasksViewToolbar).run_all_tasks.click()
+
+    qtbot.wait_until(lambda: task.state.is_completed)
+
+
+def test_retry_all_button_retries_failed_tasks(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder().with_event(lambda t: failure_controller(t, fail_count=1)).build()
+    app.add_tasks(task)
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_failed)
+
+    app.findChild(TasksViewToolbar).retry_all_btn.click()
+
+    qtbot.wait_until(lambda: task.state.is_completed)

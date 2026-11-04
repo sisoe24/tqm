@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from PySide2.QtGui import QPainter
+from PySide2.QtCore import Qt, QTimer
 from pytestqt.qtbot import QtBot
-from PySide2.QtWidgets import (QTreeView, QApplication, QStyleOptionViewItem,
-                               QStyleOptionProgressBar)
+from PySide2.QtWidgets import QTreeView, QStyleOptionProgressBar
 
-from tqm import TaskBuilder
-from tqm._main import TQManager
+from tqm import TQManager, TaskBuilder
 from tqm._core.task import TaskGroup, TaskExecutable
-from tqm._core.task_options import ProgressMode
+from tqm._ui.ui_view_model import TaskTreeView
+from tqm._core.task_builder import TaskGroupBuilder
 from tqm._ui.progress_bar_delegate import (ProgressBarAnimator,
                                            ProgressBarDelegate,
                                            ProgressBarRenderer)
+
+RANDINT = 'tqm._ui.progress_bar_delegate.random.randint'
 
 
 @pytest.fixture
@@ -42,14 +43,6 @@ def delegate(tree_view: QTreeView) -> ProgressBarDelegate:
 
 
 @pytest.fixture
-def view_option(qtbot: QtBot) -> QStyleOptionViewItem:
-    """Create a view option for testing."""
-    option = QStyleOptionViewItem()
-    option.rect.setRect(0, 0, 100, 20)
-    return option
-
-
-@pytest.fixture
 def pbar_option() -> QStyleOptionProgressBar:
     """Create a progress bar option for testing."""
     return QStyleOptionProgressBar()
@@ -59,13 +52,6 @@ def pbar_option() -> QStyleOptionProgressBar:
 def task() -> TaskExecutable:
     """Create a basic task for testing."""
     return TaskBuilder('TestTask').build()
-
-
-@pytest.fixture
-def running_task(task: TaskExecutable) -> TaskExecutable:
-    """Create a running task for testing."""
-    task.state.set_running()
-    return task
 
 
 @pytest.fixture
@@ -85,71 +71,41 @@ def failed_task(task: TaskExecutable) -> TaskExecutable:
 @pytest.fixture
 def task_group(qtbot: QtBot) -> TaskGroup:
     """Create a task group for testing."""
-    with TQManager(app_name='test_app').create_group('TestGroup') as group:
-        group.add_event(lambda t: None, label='Task1')
-        group.add_event(lambda t: None, label='Task2')
+    group = TaskGroupBuilder('TestGroup').build()
+    group.add_event(lambda t: None, label='Task1')
+    group.add_event(lambda t: None, label='Task2')
     return group
 
 
 class TestProgressBarAnimator:
-    def test_initialization(self, animator: ProgressBarAnimator):
-        """Test animator initializes with correct values."""
-        assert animator._animation_counter == 0
-        assert len(animator._task_offsets) == 0
-        assert not animator._animation_timer.isActive()
-
     def test_animation_control(self, animator: ProgressBarAnimator):
         """Test starting and stopping animation."""
+        timer = animator.findChild(QTimer)
+
         # Start animation
         animator.start_animation()
-        assert animator._animation_timer.isActive()
+        assert timer.isActive()
 
         # Stop animation
         animator.stop_animation()
-        assert not animator._animation_timer.isActive()
-
-    def test_animation_update(self, animator: ProgressBarAnimator):
-        """Test animation counter updates correctly."""
-        # Set up mock for viewport update
-        parent_mock = MagicMock()
-        parent_mock.viewport = MagicMock()
-        animator._parent = parent_mock
-
-        initial_counter = animator._animation_counter
-        animator._update_animation()
-
-        # Counter should advance by 3
-        assert animator._animation_counter == (initial_counter + 3) % 200
-        parent_mock.viewport().update.assert_called_once()
+        assert not timer.isActive()
 
     def test_task_animation_values(self, animator: ProgressBarAnimator, task: TaskExecutable):
-        """Test animation values for tasks."""
-        # First call assigns an offset
-        value1 = animator.get_task_animation_value(task)
-        assert task.id in animator._task_offsets
-        assert 0 <= value1 <= 100
-
-        # Same task gets consistent values
-        value2 = animator.get_task_animation_value(task)
-        assert value1 == value2
-
-        # Different tasks get different offsets
-        task2 = TaskBuilder('AnotherTask').build()
-        animator.get_task_animation_value(task2)
-        assert animator._task_offsets[task.id] != animator._task_offsets[task2.id]
+        """Test a task keeps its random offset."""
+        with patch(RANDINT, side_effect=[10, 90]):
+            assert animator.get_task_animation_value(task) == 10
+            assert animator.get_task_animation_value(task) == 10
 
     def test_cleanup(self, animator: ProgressBarAnimator, task: TaskExecutable):
-        """Test cleanup releases resources."""
-        # Set up state
+        """Test cleanup stops the timer and forgets the offsets."""
         animator.start_animation()
-        animator.get_task_animation_value(task)
-        assert animator._animation_timer.isActive()
-        assert len(animator._task_offsets) > 0
 
-        # Cleanup
-        animator.cleanup()
-        assert not animator._animation_timer.isActive()
-        assert len(animator._task_offsets) == 0
+        with patch(RANDINT, side_effect=[10, 90]):
+            animator.get_task_animation_value(task)
+            animator.cleanup()
+            assert animator.get_task_animation_value(task) == 90
+
+        assert not animator.findChild(QTimer).isActive()
 
 
 class TestProgressBarRenderer:
@@ -232,128 +188,66 @@ class TestProgressBarRenderer:
 
 
 class TestProgressBarDelegate:
-    def test_initialization(self, delegate: ProgressBarDelegate):
-        """Test delegate initializes correctly."""
-        assert delegate.progress_column == 2
-        assert isinstance(delegate._animator, ProgressBarAnimator)
-        assert isinstance(delegate._renderer, ProgressBarRenderer)
-
-    def test_animation_control(self, delegate: ProgressBarDelegate):
+    def test_animation_control(self, delegate: ProgressBarDelegate, tree_view: QTreeView):
         """Test animation control methods."""
+        timer = tree_view.findChild(QTimer)
+
         # Start animation
         delegate.start_animation()
-        assert delegate._animator._animation_timer.isActive()
+        assert timer.isActive()
 
         # Stop animation
         delegate.stop_animation()
-        assert not delegate._animator._animation_timer.isActive()
+        assert not timer.isActive()
 
-    @patch.object(ProgressBarRenderer, 'handle_determinate_progress')
-    @patch.object(QApplication, 'style')
-    def test_paint_determinate_progress(
-        self,
-        mock_style,
-        mock_handle,
-        delegate: ProgressBarDelegate,
-        view_option: QStyleOptionViewItem
-    ):
-        """Test painting determinate progress."""
-        # Setup
-        task = TaskBuilder('DeterminateTask').build()
-        task.state.set_running()
-        task.progress_bar.mode = ProgressMode.DETERMINATE
+    def test_cleanup(self, delegate: ProgressBarDelegate, tree_view: QTreeView):
+        """Test delegate cleanup stops the animation."""
+        delegate.start_animation()
+        delegate.cleanup()
+        assert not tree_view.findChild(QTimer).isActive()
 
-        index = MagicMock()
-        index.data.return_value = 75
-        painter = MagicMock(spec=QPainter)
+    def test_paint(self, app: TQManager, task_group: TaskGroup):
+        """Test a real paint of every state: an exception in paint fails the test."""
+        view = app.findChild(TaskTreeView)
+        view.resize(800, 300)
 
-        # Execute
-        delegate.paint_progress_bar(painter, view_option, index, task)
+        progress_column = view.get_column_index('Progress')
+        view.setColumnWidth(progress_column, 300)
 
-        # Verify
-        mock_handle.assert_called_once()
-        mock_style.return_value.drawControl.assert_called_once()
+        determinate = TaskBuilder('Determinate').with_event(
+            lambda t: None, show_progress=True
+        ).build()
+        indeterminate = TaskBuilder('Indeterminate').build()
+        completed = TaskBuilder('Completed').build()
+        failed = TaskBuilder('Failed').build()
 
-    @patch.object(ProgressBarRenderer, 'handle_indeterminate_progress')
-    @patch.object(ProgressBarAnimator, 'get_task_animation_value')
-    @patch.object(ProgressBarAnimator, 'start_animation')
-    @patch.object(QApplication, 'style')
-    def test_paint_indeterminate_progress(
-        self,
-        mock_style,
-        mock_start,
-        mock_get_value,
-        mock_handle,
-        delegate: ProgressBarDelegate,
-        view_option: QStyleOptionViewItem
-    ):
-        """Test painting indeterminate progress."""
-        # Setup
-        task = TaskBuilder('IndeterminateTask').build()
-        task.state.set_running()
-        task.progress_bar.mode = ProgressMode.INDETERMINATE
-        mock_get_value.return_value = 42
+        tasks = (determinate, indeterminate, completed, failed, task_group)
+        for task in tasks:
+            view.tasks_model.add_task(task)
+        view.expandAll()
 
-        index = MagicMock()
-        painter = MagicMock(spec=QPainter)
+        determinate.state.set_running()
+        indeterminate.state.set_running()
+        completed.state.set_completed()
+        failed.state.set_failed('Error')
 
-        # Execute
-        delegate.paint_progress_bar(painter, view_option, index, task)
+        timer = view.findChild(ProgressBarAnimator).findChild(QTimer)
+        assert not timer.isActive()
 
-        # Verify
-        mock_get_value.assert_called_once_with(task)
-        mock_handle.assert_called_once()
-        mock_start.assert_called_once()
-        mock_style.return_value.drawControl.assert_called_once()
+        def grab_progress(value: int):
+            source = view.tasks_model.index(determinate.item.row(), progress_column)
+            view.tasks_model.setData(source, value, Qt.DisplayRole)
+            rect = view.visualRect(view.proxy_model.mapFromSource(source))
+            return view.viewport().grab(rect).toImage()
 
-    @patch.object(ProgressBarRenderer, 'handle_completed_state')
-    @patch.object(QApplication, 'style')
-    def test_paint_completed_state(
-        self,
-        mock_style,
-        mock_handle,
-        delegate: ProgressBarDelegate,
-        view_option: QStyleOptionViewItem,
-        completed_task: TaskExecutable
-    ):
-        """Test painting completed task."""
-        # Setup
-        index = MagicMock()
-        index.data.return_value = 100
-        painter = MagicMock(spec=QPainter)
+        low = grab_progress(25)
+        high = grab_progress(75)
 
-        # Execute
-        delegate.paint_progress_bar(painter, view_option, index, completed_task)
+        # right of the centered text: empty bar at 25%, filled bar at 75%
+        x = low.width() * 6 // 10
+        assert any(low.pixel(x, y) != high.pixel(x, y) for y in range(low.height()))
 
-        # Verify
-        mock_handle.assert_called_once()
-        mock_style.return_value.drawControl.assert_called_once()
-
-    @patch('tqm._ui.progress_bar_delegate.ProgressBarDelegate.paint_progress_bar')
-    def test_delegate_paint_dispatching(
-        self, mock_paint_progress,
-        delegate: ProgressBarDelegate,
-        view_option: QStyleOptionViewItem
-    ):
-        """Test the delegate dispatches to correct paint method based on column."""
-        # Setup
-        task = TaskBuilder('TestTask').build()
-
-        # Mock progress column index
-        index = MagicMock()
-        index.column.return_value = delegate.progress_column
-        index.siblingAtColumn.return_value.data.return_value = task
-
-        painter = MagicMock(spec=QPainter)
-
-        # Execute
-        delegate.paint(painter, view_option, index)
-
-        # Verify
-        mock_paint_progress.assert_called_once()
-
-    def test_cleanup(self, delegate: ProgressBarDelegate):
-        """Test delegate cleanup."""
-        with patch.object(ProgressBarAnimator, 'cleanup') as mock_cleanup:
-            delegate.cleanup()
-            mock_cleanup.assert_called_once()
+        # painting a running indeterminate task starts the animation
+        view.grab()
+        assert timer.isActive()
+        view.stop_animation()

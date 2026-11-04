@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from unittest import mock
 from itertools import count
+from threading import Event, Thread, current_thread
 
 import pytest
+from PySide2.QtCore import QTimer
 from pytestqt.qtbot import QtBot
 
-from tqm import TQManager, TaskBuilder, TaskExecutable, exceptions
+from tqm import (TQManager, TaskBuilder, TaskExecutable, TaskGroupBuilder,
+                 exceptions)
 
 from ...utils import (raise_error, assert_task_failed, failure_controller,
                       assert_task_completed)
@@ -18,8 +22,7 @@ def test_simple_task_failure_handling(qtbot: QtBot, app: TQManager):
     Verifies that:
     - A task that raises an exception is properly marked as failed
     - The exception is correctly stored with the task
-    - The task cannot be retried when no retry attempts are configured
-    - Failed tasks are moved to the deferred queue
+    - The task is not retried when no retry attempts are configured
     """
     # task event will fail immediately
     task1 = (
@@ -47,8 +50,7 @@ def test_parent_child_task_failure_propagation(qtbot: QtBot, app: TQManager):
 
     Verifies that:
     - When a parent task fails, dependent child tasks are also marked as failed
-    - Child tasks receive a ParentTaskError exception
-    - The parent task's failed state is propagated correctly to the queue
+    - Child tasks receive a TaskParentError exception
     """
     # task event will fail immediately
     task1 = (
@@ -83,7 +85,7 @@ def test_parent_child_task_failure_propagation(qtbot: QtBot, app: TQManager):
         ['inactive', 'waiting', 'blocked', 'failed']
     )
 
-    # if parent task fails, all children fails automatically with a ParentTaskError
+    # if parent task fails, all children fails automatically with a TaskParentError
     assert isinstance(task2.exception, exceptions.TaskParentError)
     assert str(task2.exception) == f'Parent {task1.name} failed.'
 
@@ -306,21 +308,102 @@ def test_parallel_tasks_with_failures(qtbot: QtBot, app: TQManager):
     assert_task_failed(task2)
 
 
+def test_retry_waits_for_policy_delay(qtbot: QtBot, app: TQManager):
+    """Test that a nonzero retry delay is passed to the timer in milliseconds."""
+    task = (
+        TaskBuilder('DelayedTask')
+        .with_event(raise_error)
+        .with_retry(1, delay_seconds=3)
+        .build()
+    )
+
+    app.add_tasks(task)
+
+    with mock.patch.object(QTimer, 'singleShot') as single_shot:
+        app.start_workers()
+        qtbot.wait_until(lambda: task.state.is_retrying)
+
+    single_shot.assert_called_once()
+    assert single_shot.call_args[0][0] == 3000
+
+
+def test_retry_cascades_to_failed_child(qtbot: QtBot, app: TQManager):
+    """Test that retrying a failed parent also retries the child that failed with it."""
+    index = count()
+
+    parent = (
+        TaskBuilder('Parent')
+        .with_event(lambda t: raise_error(t, skip_error=bool(next(index))))
+        .build()
+    )
+    child = (
+        TaskBuilder('Child')
+        .with_event(lambda t: None)
+        .with_wait_for(parent)
+        .build()
+    )
+
+    app.add_tasks(parent, child)
+    app.start_workers()
+
+    qtbot.wait_until(lambda: parent.state.is_failed)
+    assert child.state.is_failed
+
+    app.executor.retry_task(parent)
+    qtbot.wait_until(lambda: child.state.is_completed or child.state.is_failed)
+
+    assert parent.state.is_completed
+    assert child.state.is_completed
+    assert child.exception is None
+
+
+def test_retry_cascades_to_failed_group(qtbot: QtBot, app: TQManager):
+    """Test that retrying a failed group member also retries the group."""
+    index = count()
+
+    task = (
+        TaskBuilder('Member')
+        .with_event(lambda t: raise_error(t, skip_error=bool(next(index))))
+        .build()
+    )
+    group = TaskGroupBuilder('Group').with_tasks(task).build()
+
+    app.add_tasks(group)
+    app.start_workers()
+
+    qtbot.wait_until(lambda: group.state.is_failed)
+
+    app.executor.retry_task(task)
+    qtbot.wait_until(lambda: group.state.is_completed or group.state.is_failed)
+
+    assert task.state.is_completed
+    assert group.state.is_completed
+
+
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V56')
 def test_callbacks_during_retries(qtbot: QtBot, app: TQManager):
     """
     Test that task callbacks are properly triggered during retry cycles.
 
     Creates a task with callbacks for all lifecycle events and verifies
-    that the callbacks are triggered in the correct sequence during
-    multiple failure and retry cycles.
+    that on_start runs before the first execution and on main, and that
+    on_completed and on_finish fire once, at the end of the retry cycle.
     """
     callback_sequence: list[str] = []
+    main_thread = current_thread()
+    on_start_threads: list[Thread] = []
+    first_execution = Event()
 
     def record_callback(name: str):
         callback_sequence.append(name)
 
+    def on_start(t: TaskExecutable):
+        on_start_threads.append(current_thread())
+        record_callback('on_start')
+
     def failing_task(task: TaskExecutable):
         callback_sequence.append('execute')
+        first_execution.set()
         return next(counter) < 2
 
     counter = count()
@@ -330,7 +413,7 @@ def test_callbacks_during_retries(qtbot: QtBot, app: TQManager):
         TaskBuilder('CallbackTask')
         .with_event(lambda t: failure_controller(t, fail_if=lambda: failing_task(t)))
         .with_retry(3, delay_seconds=0)
-        .with_on_start(lambda t: record_callback('on_start'))
+        .with_on_start(on_start)
         .with_on_failed(lambda t: record_callback('on_failed'))
         .with_on_completed(lambda t: record_callback('on_completed'))
         .with_on_finish(lambda t: record_callback('on_finish'))
@@ -338,13 +421,17 @@ def test_callbacks_during_retries(qtbot: QtBot, app: TQManager):
     )
 
     app.add_tasks(task)
+    app.start_workers()
 
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    # Hold the main thread so an on_start still queued behind the event cannot overtake it.
+    assert first_execution.wait(timeout=5)
+
+    qtbot.wait_until(lambda: task.state.is_completed or task.state.is_failed)
 
     # The expected sequence of callbacks:
     expected_sequence = [
-        'execute', 'on_start', 'execute', 'execute', 'on_completed', 'on_finish'
+        'on_start', 'execute', 'execute', 'execute', 'on_completed', 'on_finish'
     ]
 
     assert callback_sequence == expected_sequence
+    assert on_start_threads == [main_thread]

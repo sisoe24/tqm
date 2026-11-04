@@ -1,0 +1,45 @@
+name: tests
+
+on:
+  push:
+    branches: [main, refactor/test-first]
+  pull_request:
+    branches: [main, refactor/test-first]
+
+jobs:
+  tests:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install system libraries for PySide2
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libglib2.0-0 libdbus-1-3 libfontconfig1 libxkbcommon0
+
+      - name: Install dependencies
+        run: |
+          pipx install poetry
+          poetry env use python
+          poetry install --no-interaction
+
+      - name: Compile resources
+        run: poetry run python scripts/compile_resources.py
+
+      - name: Run tests
+        run: poetry run pytest -p no:cacheprovider -q
+
+      - name: Check duplicate definitions
+        run: pipx run --spec ruff==0.6.9 ruff check --select F811 tests
+
+      - name: Ban sleeps in tests
+        run: |
+          ! grep -rnE 'time\.sleep|qtbot\.wait\(' tests/ --include='*.py' \
+            --exclude-dir=bugs --exclude=test_harness.py --exclude=harness_cases.py

@@ -8,7 +8,8 @@ from PySide2.QtCore import Qt
 from tqm import TaskGroup, TaskBuilder, TaskExecutable, TaskGroupBuilder
 from tqm.typings import TASK_COLOR
 from tqm._core.task_actions import TaskAction, TaskActionVisibility
-from tqm._core.retry_policy.retry_policy import NoRetryPolicy
+from tqm._core.retry_policy.delay_strategy import FixedDelay
+from tqm._core.retry_policy.retry_policy import NoRetryPolicy, SimpleRetryPolicy
 
 
 def test_task_builder():
@@ -79,19 +80,64 @@ def test_task_builder():
     assert callable(t.actions[0].action)
 
 
-@pytest.mark.parametrize('color_type', [
-    'blue',
-    '#0000ff',
-    'rgb(0, 0, 255)',
-    None,
-    (255, 0, 0, 1),
-    Qt.red,
-    QColor(255, 0, 0, 1),
+@pytest.mark.parametrize('color_type, expected', [
+    ('blue', QColor(0, 0, 255)),
+    ('#0000ff', QColor(0, 0, 255)),
+    pytest.param(
+        'rgb(0, 0, 255)', QColor(0, 0, 255),
+        marks=pytest.mark.xfail(strict=True, raises=AssertionError, reason='V60')
+    ),
+    ((255, 0, 0, 1), QColor(255, 0, 0, 1)),
+    (Qt.red, QColor(255, 0, 0)),
+    (QColor(255, 0, 0, 1), QColor(255, 0, 0, 1)),
 ])
-def test_task_builder_color(color_type: TASK_COLOR):
+def test_task_builder_color(color_type: TASK_COLOR, expected: QColor):
     t = TaskBuilder('abc').with_color(color_type).build()
-    assert isinstance(t.color, QColor)
+    assert t.color == expected
+
+
+def test_task_builder_random_color():
+    t = TaskBuilder('abc').with_color(None).build()
     assert t.color.isValid()
+    assert t.color != TaskBuilder('abc').build().color
+
+
+def test_task_builder_invalid_color_name_gets_a_random_color():
+    assert TaskBuilder('abc').with_color('not a color').build().color.isValid()
+
+
+def test_task_builder_with_retry():
+    t = TaskBuilder('abc').with_retry(max_attempts=4, delay_seconds=7).build()
+
+    assert isinstance(t.retry_policy, SimpleRetryPolicy)
+    assert t.retry_policy.max_attempts == 4
+    assert isinstance(t.retry_policy.delay_strategy, FixedDelay)
+    assert t.retry_policy.delay_strategy.delay_seconds == 7
+
+
+def test_task_builder_with_file_action():
+    t = (
+        TaskBuilder('abc')
+        .with_file_action('/fake/file.txt', visibility=TaskActionVisibility.ALWAYS)
+        .build()
+    )
+
+    assert len(t.actions) == 1
+    assert t.actions[0].name == '%file%'
+    assert t.actions[0].visibility == TaskActionVisibility.ALWAYS
+    assert t.actions[0].action(t) == '/fake/file.txt'
+
+
+def test_task_group_builder_with_tasks():
+    task1 = TaskBuilder('task1').build()
+    task2 = TaskBuilder('task2').build()
+
+    group = TaskGroupBuilder('abc').with_tasks(task1, task2).build()
+
+    assert group.tasks == {task1, task2}
+    assert task1.group is group
+    assert task2.group is group
+    assert group.progress_bar.maximum == 2
 
 
 def test_task_group_builder():

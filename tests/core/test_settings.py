@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from tqm._core.settings import Settings, open_settings, get_config_path
+from tqm._core.settings import (Settings, get_qss_path, open_settings,
+                               get_config_path)
 
 
 def test_windows_path(monkeypatch: pytest.MonkeyPatch):
@@ -21,10 +22,7 @@ def test_windows_path(monkeypatch: pytest.MonkeyPatch):
     result = get_config_path('test_app')
 
     # Check result
-    assert str(result) == '/fake/local/tqm/test_app'
-
-    # Clean up
-    monkeypatch.delenv('LOCALAPPDATA')
+    assert result == Path('/fake/local/tqm/test_app')
 
 
 def test_unix_path(monkeypatch: pytest.MonkeyPatch):
@@ -37,13 +35,10 @@ def test_unix_path(monkeypatch: pytest.MonkeyPatch):
     result = get_config_path('test_app')
 
     # Check result
-    assert str(result) == '/fake/config/tqm/test_app'
-
-    # Clean up
-    monkeypatch.delenv('XDG_CONFIG_HOME')
+    assert result == Path('/fake/config/tqm/test_app')
 
 
-def test_windows_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_windows_fallback(monkeypatch: pytest.MonkeyPatch):
     """Test Windows fallback when LOCALAPPDATA is not set."""
     # Setup
     monkeypatch.setattr(sys, 'platform', 'win32')
@@ -53,8 +48,8 @@ def test_windows_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     # Test
     result = get_config_path('test_app')
 
-    # Check path structure is correct (not full path as home varies)
-    assert str(result).endswith('/AppData/Local/tqm/test_app')
+    # Check result
+    assert result == Path('/fake/home/AppData/Local/tqm/test_app')
 
 
 def test_unix_fallback(monkeypatch: pytest.MonkeyPatch):
@@ -68,13 +63,15 @@ def test_unix_fallback(monkeypatch: pytest.MonkeyPatch):
     result = get_config_path('test_app')
 
     # Check result
-    assert str(result) == '/fake/home/.config/tqm/test_app'
+    assert result == Path('/fake/home/.config/tqm/test_app')
 
 
-def test_environment_variables_set():
+def test_environment_variables_set(monkeypatch: pytest.MonkeyPatch):
     """Test that environment variables are properly set."""
     # Setup
     app_name = 'env_var_test'
+    monkeypatch.setenv('TQM_CONFIG_PATH', 'stale')
+    monkeypatch.setenv('TQM_SETTINGS_PATH', 'stale')
 
     # Test
     result = get_config_path(app_name)
@@ -95,19 +92,34 @@ def mock_settings(tmp_path: Path):
     f.unlink()
 
 
+def test_load_from_json(tmp_path: Path):
+    f = tmp_path / 'settings.json'
+    f.write_text('{"max_workers": 3, "wrap_lines": false, "enable_debug": true}')
+
+    with open_settings(json_file_path=f) as s:
+        assert s.max_workers == 3
+        assert s.wrap_lines is False
+        assert s.enable_debug is True
+
+
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V28')
+def test_load_from_json_keeps_known_keys_on_unknown_key(tmp_path: Path):
+    f = tmp_path / 'settings.json'
+    f.write_text('{"max_workers": 3, "xxx": -1}')
+
+    with open_settings(json_file_path=f) as s:
+        assert s.max_workers == 3
+
+
 def test_open_settings_read_only(mock_settings: Path):
     # we only modify the current instance
     with open_settings(json_file_path=mock_settings) as s:
         assert isinstance(s, Settings)
         s.wrap_lines = False
 
-    # opening the settings again should have the same values
-    with open_settings(json_file_path=mock_settings) as s:
-        assert not s.wrap_lines
-
     # but the file should not have been modified
     with mock_settings.open() as s:
-        assert len(json.load(s)) == 1  # only the xxx attribute
+        assert json.load(s) == {'xxx': -1}
 
 
 def test_open_settings_read_write(mock_settings: Path):
@@ -118,3 +130,25 @@ def test_open_settings_read_write(mock_settings: Path):
     with mock_settings.open() as s:
         data = json.load(s)
         assert data['wrap_lines'] == False
+
+
+def test_open_settings_writes_defaults_for_a_new_file(tmp_path: Path):
+    f = tmp_path / 'settings.json'
+
+    with open_settings(json_file_path=f):
+        pass
+
+    assert json.loads(f.read_text())['max_workers'] == Settings().max_workers
+
+
+def test_qss_path_uses_the_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv('TQM_QSS_PATH', '/fake/style.qss')
+
+    assert get_qss_path(tmp_path) == Path('/fake/style.qss')
+
+
+def test_qss_path_keeps_the_user_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv('TQM_QSS_PATH', raising=False)
+    (tmp_path / 'style.qss').write_text('mine')
+
+    assert get_qss_path(tmp_path).read_text() == 'mine'

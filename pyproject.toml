@@ -49,9 +49,6 @@ addopts = [
     "--strict-markers",
     "--no-header",
     "--tb=short",
-    "--cov=tqm",
-    "--cov-report=html",
-    "--cov-report=xml",
     "-W ignore::DeprecationWarning",
 ]
 
