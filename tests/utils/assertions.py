@@ -1,8 +1,12 @@
 
 from __future__ import annotations
 
+import time
 from pprint import pformat
-from typing import List, Optional
+from typing import List, Type, Iterator, Optional
+from contextlib import contextmanager
+
+from pytestqt.qtbot import QtBot
 
 from tqm._core.task import TaskUnit
 
@@ -115,3 +119,28 @@ def assert_task_failed(
                 f"Full expected history: {expected_states}\n"
                 f"Full actual history: {actual_history}"
             )
+
+
+@contextmanager
+def must_raise(error: Type[BaseException]) -> Iterator[None]:
+    """Like pytest.raises, but a missing error is an AssertionError, so strict xfail accepts it."""
+    try:
+        yield
+    except error:
+        return
+    raise AssertionError(f'{error.__name__} was not raised')
+
+
+@contextmanager
+def must_not_raise(*errors: Type[BaseException]) -> Iterator[None]:
+    """Turn one named error into an AssertionError. Other errors stay real failures."""
+    try:
+        yield
+    except errors as error:
+        raise AssertionError(f'raised {error!r}') from error
+
+
+def run_events(qtbot: QtBot, milliseconds: int) -> None:
+    """Run the event loop for a fixed time. Only for proving that something does not happen."""
+    deadline = time.monotonic() + milliseconds / 1000
+    qtbot.wait_until(lambda: time.monotonic() >= deadline, timeout=milliseconds + 10000)

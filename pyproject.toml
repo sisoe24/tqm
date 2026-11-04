@@ -44,12 +44,11 @@ omit = ["tqm/tests/*", "tqm/__init__.py", "tqm/utils/*", "tqm/widgets/*"]
 testpaths = "tests"
 qt_api = "pyside2"
 markers = ["quick: mark test"]
+xfail_strict = true
 addopts = [
+    "--strict-markers",
     "--no-header",
     "--tb=short",
-    "--cov=tqm",
-    "--cov-report=html",
-    "--cov-report=xml",
     "-W ignore::DeprecationWarning",
 ]
 

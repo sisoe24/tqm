@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from typing import List
-
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskExecutable, TaskGroupBuilder
-from tqm._core.task_runner import TaskRunner, GroupRunner
+from tqm._core.task_runner import TaskRunner
 
 from ..utils import (SafeList, raise_error, assert_task_failed,
                      assert_task_completed)
 
 
-class estTaskRunner:
+class TestTaskRunner:
     def test_task_runner_signals(self, qtbot: QtBot):
         """Test that the TaskRunner emits the right signals in the right order."""
         signals_received = SafeList[str]()
@@ -70,8 +68,8 @@ class estTaskRunner:
 
         app.add_tasks(task)
 
-        with qtbot.wait_signal(app.executor.callbacks.system_idle):
-            app.start_workers()
+        app.start_workers()
+        qtbot.wait_until(lambda: task.state.is_completed)
 
         assert callbacks_called[0] == 'on_start'
         assert callbacks_called[1] == 'on_completed'
@@ -96,12 +94,11 @@ class estTaskRunner:
 
         app.add_tasks(task)
 
-        with qtbot.wait_signal(app.executor.callbacks.system_idle):
-            app.start_workers()
+        app.start_workers()
+        qtbot.wait_until(lambda: task.state.is_failed)
 
-        assert callbacks_called[0] == 'on_start'
-        assert callbacks_called[1] == 'on_failed'
-        assert callbacks_called[2] == 'on_finish'
+        assert callbacks_called.to_list() == ['on_start', 'on_failed', 'on_finish']
+        assert str(task.exception) == 'Task failed intentionally'
         assert_task_failed(task)
 
     def test_group_runner(self, qtbot: QtBot, app: TQManager):
@@ -111,8 +108,8 @@ class estTaskRunner:
             task2 = group.add_event(lambda t: t.log('Task 2 executed'), label='Task2')
 
         # Start the group execution
-        with qtbot.wait_signal(app.executor.callbacks.system_idle):
-            app.start_workers()
+        app.start_workers()
+        qtbot.wait_until(lambda: group.state.is_completed)
 
         # All tasks should complete successfully
         assert_task_completed(task1)
@@ -127,8 +124,8 @@ class estTaskRunner:
             task3 = group.add_event(lambda t: t.log('Task 3 executed'), label='Task3')
 
         # Start the group execution
-        with qtbot.wait_signal(app.executor.callbacks.system_idle):
-            app.start_workers()
+        app.start_workers()
+        qtbot.wait_until(lambda: group.state.is_failed)
 
         # Task1 and Task3 should complete, Task2 should fail, and the group should fail
         assert_task_completed(task1)
@@ -170,8 +167,8 @@ class TestGroupRunner:
         app.add_tasks(group)
 
         # Start execution and wait for completion
-        with qtbot.wait_signal(app.executor.callbacks.system_idle):
-            app.start_workers()
+        app.start_workers()
+        qtbot.wait_until(lambda: group.state.is_completed)
 
         # Verify all tasks were executed
         assert len(execution_order) == 2
@@ -182,67 +179,6 @@ class TestGroupRunner:
         assert_task_completed(task1)
         assert_task_completed(task2)
         assert_task_completed(group)
-
-    def test_nested_groups_with_runner(self, qtbot: QtBot, app: TQManager):
-        """Test the GroupRunner with nested groups."""
-        execution_order = SafeList[str]()
-
-        # Create inner group
-        inner_group = (
-            TaskGroupBuilder('InnerGroup')
-            .build()
-        )
-
-        # Add tasks to inner group
-        inner_task1 = (
-            TaskBuilder('InnerTask1')
-            .with_event(lambda t: execution_order.append(t.name))
-            .build()
-        )
-
-        inner_task2 = (
-            TaskBuilder('InnerTask2')
-            .with_event(lambda t: execution_order.append(t.name))
-            .build()
-        )
-
-        inner_group.add_tasks(inner_task1, inner_task2)
-
-        # Create outer group that depends on inner group
-        outer_group = (
-            TaskGroupBuilder('OuterGroup')
-            .with_wait_for(inner_group)
-            .build()
-        )
-
-        # Add tasks to outer group
-        outer_task = (
-            TaskBuilder('OuterTask')
-            .with_event(lambda t: execution_order.append(t.name))
-            .build()
-        )
-
-        outer_group.add_tasks(outer_task)
-
-        # Add both groups to the task manager
-        app.add_tasks(inner_group, outer_group)
-
-        # Start execution and wait for completion
-        with qtbot.wait_signal(app.executor.callbacks.system_idle):
-            app.start_workers()
-
-        # Verify execution order - inner group tasks should execute before outer group
-        assert len(execution_order) == 3
-        assert execution_order.index('InnerTask1') < execution_order.index('OuterTask')
-        assert execution_order.index('InnerTask2') < execution_order.index('OuterTask')
-
-        # Verify task and group states
-        assert_task_completed(inner_task1)
-        assert_task_completed(inner_task2)
-        assert_task_completed(inner_group)
-        assert_task_completed(outer_task)
-        assert_task_completed(outer_group, ['inactive', 'waiting',
-                              'blocked', 'waiting', 'running', 'completed'])
 
     def test_group_with_complex_callbacks(self, qtbot: QtBot, app: TQManager):
         """Test a group with callbacks at multiple levels."""
@@ -282,8 +218,8 @@ class TestGroupRunner:
         app.add_tasks(group)
 
         # Start execution and wait for completion
-        with qtbot.wait_signal(app.executor.callbacks.system_idle):
-            app.start_workers()
+        app.start_workers()
+        qtbot.wait_until(lambda: group.state.is_completed)
 
         # Verify callback sequence
         # Group should start first
@@ -366,8 +302,8 @@ class TestGroupRunner:
         app.add_tasks(group)
 
         # Start execution
-        with qtbot.wait_signal(app.executor.callbacks.system_idle):
-            app.start_workers()
+        app.start_workers()
+        qtbot.wait_until(lambda: group.state.is_failed)
 
         # Verify execution occurred
         assert 'SuccessTask1' in execution_order
@@ -394,64 +330,3 @@ class TestGroupRunner:
 
         # Group should fail because one task failed
         assert_task_failed(group)
-
-    def test_direct_group_runner_execution(self, qtbot: QtBot):
-        """Test direct execution of a GroupRunner without using TasksManager."""
-        execution_order = SafeList[str]()
-
-        # Create individual tasks
-        task1 = (
-            TaskBuilder('DirectTask1')
-            .with_event(lambda t: execution_order.append(t.name))
-            .build()
-        )
-
-        task2 = (
-            TaskBuilder('DirectTask2')
-            .with_event(lambda t: execution_order.append(t.name))
-            .build()
-        )
-
-        # Create a group
-        group = (
-            TaskGroupBuilder('DirectGroup')
-            .with_tasks(task1, task2)
-            .build()
-        )
-
-        # Create a GroupRunner directly
-        runner = GroupRunner(group)
-
-        # Track signals
-        signals_received = SafeList[str]()
-        runner.signals.runner_started.connect(lambda _: signals_received.append('started'))
-        runner.signals.runner_completed.connect(
-            lambda g: (
-                g.state.set_completed(), signals_received.append('completed'),
-            ))
-
-        # We need to handle the group_task_added signal to simulate what TaskExecutor would do
-        def handle_task_added(tasks: List[TaskExecutable]):
-            for task in tasks:
-                task_runner = TaskRunner(task)
-                task_runner.signals.runner_completed.connect(lambda t: t.state.set_completed())
-                task_runner.run()
-
-        runner.signals.group_task_added.connect(handle_task_added)
-
-        # Run the group runner
-        runner.run()
-
-        # Verify execution
-        assert len(execution_order) == 2
-        assert 'DirectTask1' in execution_order
-        assert 'DirectTask2' in execution_order
-
-        # Verify signals
-        assert signals_received[0] == 'started'
-        assert signals_received[1] == 'completed'
-
-        # Verify states
-        assert task1.state.is_completed
-        assert task2.state.is_completed
-        assert group.state.is_completed

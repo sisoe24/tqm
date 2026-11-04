@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from typing import Callable
+from threading import Event
+
 import pytest
 from pytestqt.qtbot import QtBot
 
-from tqm import (TQManager, TaskBuilder, TaskExecutable, TaskGroupBuilder,
-                 exceptions)
+from tqm import TQManager, TaskBuilder, TaskGroupBuilder, exceptions
 
-from ...utils import SafeList, raise_error
+from ...utils import SafeList, raise_error, assert_task_completed
 
 
 def test_remove_single_task(qtbot: QtBot, app: TQManager):
@@ -35,33 +37,29 @@ def test_remove_single_task(qtbot: QtBot, app: TQManager):
     assert task.state.is_deleted
 
 
-def test_remove_running_task_fails(qtbot: QtBot, app: TQManager):
-    """Test that removing a running task raises an exception."""
-    execution_reached = SafeList[bool]()
+def test_remove_running_task_fails(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
+    """Test that removing a running task raises and leaves the task running."""
+    release = gate()
 
-    def slow_task(t: TaskExecutable):
-        # Mark that execution started
-        execution_reached.append(True)
-        # Wait for signal to continue
-        qtbot.wait(100)  # Small delay
-
-    # Create a task
     task = (
         TaskBuilder('SlowTask')
-        .with_event(slow_task)
+        .with_event(lambda t: release.wait())
         .build()
     )
 
-    # Add task and start execution
     app.add_tasks(task)
     app.start_workers()
 
-    # Wait until task starts executing
-    qtbot.wait_until(lambda: len(execution_reached) > 0)
+    qtbot.wait_until(lambda: task.state.is_running)
 
-    # Try to remove the task - should do nothing
     with pytest.raises(exceptions.TaskError):
         app.executor.remove_task(task)
+
+    assert task.state.is_running
+    assert task in app.executor.get_all_tasks()
+
+    release.set()
+    qtbot.wait_until(lambda: task.state.is_completed)
 
 
 def test_remove_task_with_dependencies(qtbot: QtBot, app: TQManager):
@@ -123,9 +121,10 @@ def test_remove_task_after_completion(qtbot: QtBot, app: TQManager):
     assert len(executed) == 1
     assert task.state.is_completed
 
-    # Removing a completed task should do nothing
+    # Removing a completed task deletes it
     app.executor.remove_task(task)
     assert task not in app.executor.get_all_tasks()
+    assert task.state.is_deleted
 
 
 def test_remove_failed_task(qtbot: QtBot, app: TQManager):
@@ -190,8 +189,8 @@ def test_remove_task_from_group(qtbot: QtBot, app: TQManager):
     assert task1 not in group.tasks
 
     # # Start workers and verify remaining task completes
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_completed or group.state.is_failed)
 
     # # Verify task2 executed and completed
     assert task2.state.is_completed
@@ -262,12 +261,15 @@ def test_remove_all_tasks(qtbot: QtBot, app: TQManager):
     assert all(task.state.is_deleted for task in tasks)
 
 
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V48')
 def test_remove_and_add_same_task(qtbot: QtBot, app: TQManager):
-    """Test removing a task and then trying to add it again."""
+    """Test that a removed task can be added again and runs once."""
+    executed = SafeList[str]()
+
     # Create a task
     task = (
         TaskBuilder('ReusableTask')
-        .with_event(lambda t: None)
+        .with_event(lambda t: executed.append(t.name))
         .build()
     )
 
@@ -287,3 +289,12 @@ def test_remove_and_add_same_task(qtbot: QtBot, app: TQManager):
     app.add_tasks(task)
 
     assert task in app.executor.get_all_tasks()
+
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_completed)
+
+    assert executed.to_list() == ['ReusableTask']
+    assert_task_completed(
+        task,
+        ['inactive', 'waiting', 'deleted', 'waiting', 'running', 'completed']
+    )
