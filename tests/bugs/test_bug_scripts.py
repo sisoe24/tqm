@@ -23,7 +23,6 @@ def test_script_passes(script: str, timeout: float):
     assert_script_passes(SCRIPTS / f'{script}.py', timeout=timeout)
 
 
-# v1_gc_on_worker covers only the retry part of V1. The rest of V1 stays open until R5.
 @pytest.mark.parametrize('script', [
     'v1_gc_on_worker',
     'v14_retry_waiting',

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import gc
 import os
 import threading
 import faulthandler
@@ -66,10 +65,8 @@ def isolate_global_state(tmp_path: Path) -> Generator[None, Any, None]:
     """Keep each test away from the real config dir and from the state of other tests.
 
     The patch restores env vars that the code writes directly. Delete the Settings
-    part at R9, the LOGGER part at R10 and the gc part at R5, or they will mask regressions.
+    part at R9 and the LOGGER part at R10, or they will mask regressions.
     """
-    # V1: GC on a worker thread segfaults once dropped managers pile up. Its script covers it.
-    gc.disable()
     handlers = list(LOGGER.handlers)
     widget_handler = LOGGER.widget
     Settings._instance = None
@@ -86,8 +83,6 @@ def isolate_global_state(tmp_path: Path) -> Generator[None, Any, None]:
         LOGGER.removeHandler(handler)
         handler.close()
     LOGGER.handlers[:] = handlers
-    gc.collect()
-    gc.enable()
 
 
 @pytest.fixture
