@@ -17,7 +17,7 @@ def start_blocked_task(qtbot: QtBot, app: TQManager, release: Event) -> TaskExec
     return task
 
 
-def test_shutdown_waits_for_the_running_task(
+def test_shutdown_returns_while_the_task_runs(
     qtbot: QtBot,
     app: TQManager,
     gate: Callable[[], Event]
@@ -34,10 +34,12 @@ def test_shutdown_waits_for_the_running_task(
     app.start_workers()
     qtbot.wait_until(lambda: task.state.is_running)
 
-    # Fires inside the event loop that shutdown runs while it waits.
+    # Fires only once an event loop runs, so a shutdown that waits would see the task finish.
     QTimer.singleShot(0, release.set)
     app.executor.shutdown()
 
+    assert finished == []
+    qtbot.wait_until(lambda: task.state.is_completed)
     assert finished == ['Slow']
 
 
@@ -64,7 +66,7 @@ def test_add_task_is_rejected_only_during_shutdown(
     gate: Callable[[], Event]
 ):
     release = gate()
-    start_blocked_task(qtbot, app, release)
+    running = start_blocked_task(qtbot, app, release)
     during = TaskBuilder().build()
 
     def add_then_release() -> None:
@@ -73,6 +75,8 @@ def test_add_task_is_rejected_only_during_shutdown(
 
     QTimer.singleShot(0, add_then_release)
     app.executor.shutdown()
+    # Shutdown lasts until the running task finishes.
+    qtbot.wait_until(lambda: running.state.is_completed)
 
     assert during.state.is_inactive
 

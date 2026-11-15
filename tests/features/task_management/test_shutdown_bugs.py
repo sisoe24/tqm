@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, List, Callable
 from threading import Event
 
-import pytest
 from PySide2.QtCore import QTimer
 from pytestqt.qtbot import QtBot
 
@@ -14,7 +13,6 @@ from ...utils import run_events
 from ...utils.harness import StepPool
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V30')
 def test_no_retry_starts_during_or_after_shutdown(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     release = gate()
     runs: List[int] = []
@@ -36,7 +34,6 @@ def test_no_retry_starts_during_or_after_shutdown(qtbot: QtBot, app: TQManager, 
     assert len(runs) == 1
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V30')
 def test_blocked_child_does_not_start_during_shutdown(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     release = gate()
     ran: List[int] = []
@@ -53,7 +50,6 @@ def test_blocked_child_does_not_start_during_shutdown(qtbot: QtBot, app: TQManag
     assert not ran
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V31')
 def test_drained_tasks_do_not_stay_waiting(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     release = gate()
     idle: List[int] = []
@@ -72,7 +68,6 @@ def test_drained_tasks_do_not_stay_waiting(qtbot: QtBot, app: TQManager, gate: C
     assert idle
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V31')
 def test_shutdown_with_nothing_running_drains_the_queue(executor: TaskExecutor, step_pool: StepPool):
     tasks = [TaskBuilder().build() for _ in range(2)]
     for task in tasks:
@@ -83,7 +78,6 @@ def test_shutdown_with_nothing_running_drains_the_queue(executor: TaskExecutor, 
     assert not any(task.state.is_waiting for task in tasks)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V72')
 def test_toolbar_retry_is_gated_during_shutdown(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     release = gate()
     runs: List[int] = []
@@ -117,6 +111,7 @@ def test_add_tasks_is_gated_during_shutdown(qtbot: QtBot, app: TQManager, gate: 
     QTimer.singleShot(0, lambda: app.add_tasks(late))
     QTimer.singleShot(50, release.set)
     app.executor.shutdown()
+    qtbot.wait_until(lambda: running.state.is_completed)
 
     model = app.findChild(TaskTreeView).model()
     assert [model.index(i, 0).data() for i in range(model.rowCount())] == ['R']

@@ -73,11 +73,12 @@ def test_status_counts_each_state(executor: TaskExecutor, step_pool: StepPool):
     assert seen[-1] == {'Running': 0, 'Completed': 2, 'Failed': 1}
 
 
-def test_shutdown_when_nothing_runs_keeps_the_queue(executor: TaskExecutor, step_pool: StepPool):
-    task = TaskBuilder().build()
-    executor.add_task(task)
+def test_shutdown_when_nothing_runs_ends_at_once(executor: TaskExecutor, step_pool: StepPool):
+    executor.add_task(TaskBuilder().build())
 
     executor.shutdown()
+    task = TaskBuilder().build()
+    executor.add_task(task)
     executor.start_workers()
 
     assert step_pool.activeThreadCount() == 1

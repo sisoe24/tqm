@@ -10,18 +10,6 @@ from ..utils.harness import assert_script_passes
 SCRIPTS = Path(__file__).parent
 
 
-def bug(reason: str, script: str, timeout: float = 30) -> pytest.param:
-    mark = pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason)
-    return pytest.param(script, timeout, id=script, marks=mark)
-
-
-@pytest.mark.parametrize('script, timeout', [
-    bug('audit section 6', 'shutdown_under_core_app'),
-])
-def test_script_passes(script: str, timeout: float):
-    assert_script_passes(SCRIPTS / f'{script}.py', timeout=timeout)
-
-
 @pytest.mark.parametrize('script', [
     'v1_gc_on_worker',
     'v14_retry_waiting',
@@ -37,6 +25,7 @@ def test_script_passes(script: str, timeout: float):
     'v50_late_add',
     'v50_nested_group_removed',
     'v35_dropped_managers',
+    'shutdown_under_core_app',
 ])
 def test_fixed_script_passes(script: str):
     assert_script_passes(SCRIPTS / f'{script}.py')

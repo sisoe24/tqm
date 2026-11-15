@@ -14,11 +14,11 @@ from .task_runner import RunnerSignals
 from .retry_policy import RetryPolicy, NoRetryPolicy
 from .task_actions import TaskAction
 from .task_options import ProgressBarOptions
-from .._ui.task_item import TaskItem
 from .task_callbacks import TaskCallbacks
 from .task_predicate import TaskPredicate
 
 if TYPE_CHECKING:
+    from .._ui.task_item import TaskItem
     from .task import TaskUnit
 
 T = TypeVar('T')

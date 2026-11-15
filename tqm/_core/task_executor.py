@@ -11,13 +11,19 @@ from PySide2.QtCore import Qt, Slot, QTimer, Signal, QObject
 from .task import TaskUnit, TaskGroup, TaskExecutable
 from .queue import TasksQueue, TaskNotFoundError
 from .logger import LOGGER
-from .shutdown import ShutdownThread
 from .task_retry import RetryHandler
 from ..exceptions import (TaskError, TaskEventError, TaskGroupError, TaskParentError,
                           TaskAlreadyInQueue, TaskPredicateError)
 from .task_runner import TaskRunner, RunnerSignals
 from .task_predicate import PredicateEventType
 from .threadpool_interface import ThreadPoolWrapper, ThreadPoolInterface
+
+
+def _depth(task: TaskUnit) -> int:
+    depth = 0
+    while task.parent:
+        task, depth = task.parent, depth + 1
+    return depth
 
 
 class _ExecutorCallbacks(QObject):
@@ -213,7 +219,6 @@ class TaskExecutor(QObject):
 
         self._threadpool = threadpool or ThreadPoolWrapper(self)
         self._threadpool.setMaxThreadCount(self.max_workers)
-        self._shutdown_thread = ShutdownThread(self._threadpool)
 
         self.retry_handler = RetryHandler(self._on_retry_due, self)
 
@@ -227,7 +232,7 @@ class TaskExecutor(QObject):
         # Tasks requeued by their retry policy: their next start is not a new run.
         self._policy_retries: Set[TaskUnit] = set()
 
-        self._is_shutting_down = False
+        self._shutdown_requested = False
         self._thread_id = threading.get_ident()
 
     @property
@@ -317,6 +322,9 @@ class TaskExecutor(QObject):
                 f'State "{task.state.current}" is not removable'
             )
 
+        self._drop(task)
+
+    def _drop(self, task: TaskUnit) -> None:
         with contextlib.suppress(TaskNotFoundError):
             self.queue.remove_task(task)
 
@@ -338,6 +346,10 @@ class TaskExecutor(QObject):
                 f'Cannot retry task: {task.name}. '
                 f'State "{task.state.current}" is not retryable'
             )
+
+        if self._shutting_down():
+            LOGGER.warning('Task manager is shutting down. Cannot retry task')
+            return
 
         task.reset('Reset & Retry')
 
@@ -375,7 +387,7 @@ class TaskExecutor(QObject):
         with contextlib.suppress(TaskNotFoundError):
             self.queue.remove_task(task)
 
-        if not self.retry_handler.handle_failure(task, exception):
+        if self._shutting_down() or not self.retry_handler.handle_failure(task, exception):
             self._fail_task(task, exception)
 
     def _fail_task(self, task: TaskUnit, exception: Exception) -> None:
@@ -435,7 +447,7 @@ class TaskExecutor(QObject):
     def add_task(self, task: TaskUnit) -> TaskUnit:
         self._check_thread()
 
-        if self._is_shutting_down:
+        if self._shutting_down():
             LOGGER.warning('Task manager is shutting down. Cannot add new task')
             return task
 
@@ -545,23 +557,25 @@ class TaskExecutor(QObject):
     def get_all_tasks(self) -> Set[TaskUnit]:
         return self.registry
 
+    def _shutting_down(self) -> bool:
+        """True from shutdown until the tasks that were running have finished."""
+        if self._shutdown_requested and self.status_tracker.is_idle():
+            self._shutdown_requested = False
+        return self._shutdown_requested
+
     def shutdown(self) -> None:
-        """Shutdown the task manager.
+        """Shutdown the task manager without waiting for running tasks.
 
-        This method clears the queue and waits for workers to finish their tasks.
-
-        Note: Workers will complete their current tasks before shutting down.
-        A new thread handles the shutdown.
+        Tasks that have not started are removed and end deleted. Running tasks finish
+        in the background, without retries. Until they do, add_task and retry_task
+        are ignored.
 
         """
-        if not self.status_tracker.running_tasks:
-            return
+        LOGGER.info('Removing all tasks that have not started. Running tasks finish in the background.')
+        self._shutdown_requested = True
 
-        LOGGER.info('Removing all tasks from queue and waiting for workers to finish...')
-
-        while self.queue.size():
-            self.queue.dequeue()
-
-        self._is_shutting_down = True
-        self._shutdown_thread.run()
-        self._is_shutting_down = False
+        pending = [t for t in self.registry if t.state.is_waiting or t.state.is_blocked or t.state.is_retrying]
+        # Children first, so removing a parent never meets a child that is still blocked.
+        for task in sorted(pending, key=_depth, reverse=True):
+            if task in self.registry:
+                self._drop(task)
