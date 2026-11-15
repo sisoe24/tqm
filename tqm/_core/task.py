@@ -28,10 +28,6 @@ class TaskExecutable(TaskBase['TaskExecutable', TaskRunner]):
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def reset(self, comment: str = '', reset_attempts: bool = False) -> None:
-        super().reset(comment, reset_attempts)
-        self.runner = TaskRunner(self)
-
     def delete(self, comment: str = '') -> None:
         if self.group:
             self.group.tasks.remove(self)
@@ -59,10 +55,6 @@ class TaskGroup(TaskBase['TaskGroup', GroupRunner]):
 
     def __hash__(self) -> int:
         return hash(self.id)
-
-    def reset(self, comment: str = '', reset_attempts: bool = False) -> None:
-        super().reset(comment, reset_attempts)
-        self.runner = GroupRunner(self)
 
     def add_tasks(self, *tasks: TaskExecutable) -> None:
         for task in tasks:

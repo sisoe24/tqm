@@ -235,7 +235,6 @@ def test_ui_callbacks_on_task_state_changes(qtbot: QtBot, app: TQManager):
     assert cell_data(view, 'CallbackTask', 'Completed') == task.state.get_last().timestamp
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V19')
 def test_started_column_shows_running_timestamp(qtbot: QtBot, app: TQManager):
     task = TaskBuilder('StartedTask').with_event(lambda t: None).build()
     app.add_tasks(task)

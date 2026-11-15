@@ -132,6 +132,9 @@ class _ExecutorBlocker(QObject):
         task: TaskUnit,
         predicate_event: PredicateEventType
     ) -> None:
+        # A predicate timer can outlive its task's wait, for example after a parent failed.
+        if not (task.state.is_blocked or task.state.is_retrying):
+            return
 
         if predicate_event == PredicateEventType.SUCCESS:
             LOGGER.info(f"{task.name} predicate passed")
@@ -267,9 +270,11 @@ class TaskExecutor(QObject):
         self._blocker.predicate_failed.connect(self._on_task_failed)
         self._blocker.predicate_successful.connect(self._predicate_success)
 
-        self.retry_handler = RetryHandler(self.retry_task)
+        self.retry_handler = RetryHandler(self._on_retry_due)
 
         self.registry: Set[TaskUnit] = set()
+        # Tasks requeued by their retry policy: their next start is not a new run.
+        self._policy_retries: Set[TaskUnit] = set()
 
         self._is_shutting_down = False
 
@@ -322,19 +327,22 @@ class TaskExecutor(QObject):
             self.queue.remove_task(task)
 
         self.registry.remove(task)
+        self._policy_retries.discard(task)
 
         self._remove_and_cleanup_task(task)
 
     def retry_task(self, task: TaskUnit) -> None:
-        """Retry a failed task.
-
-        This method retries a failed task by re-adding it to the queue.
-        The task must be in the deferred queue and have retries left.
+        """Retry a failed or completed task by re-adding it to the queue.
 
         Raises:
-            DeferredTaskNotFound: If the task is not found in the deferred queue.
+            TaskError: If the task is not failed or completed.
 
         """
+        if not task.state.is_retryable:
+            raise TaskError(
+                f'Cannot retry task: {task.name}. '
+                f'State "{task.state.current}" is not retryable'
+            )
 
         task.reset('Reset & Retry')
 
@@ -349,7 +357,17 @@ class TaskExecutor(QObject):
             self.retry_task(task.group)
 
         self._initialize_task(task)
-        self._start_worker()
+        self._start_task(task)
+
+    def _on_retry_due(self, task: TaskUnit) -> None:
+        # The task may have been removed or retried by hand during the delay.
+        if not task.state.is_retrying:
+            return
+
+        task.reset('Retry')
+        self._policy_retries.add(task)
+        self._initialize_task(task)
+        self._start_task(task)
 
     @Slot(object)
     def _on_task_failed(self, task: TaskUnit, exception: Exception) -> None:
@@ -366,16 +384,16 @@ class TaskExecutor(QObject):
 
         LOGGER.error(f'{task.name} failed: {exception}')
 
+        if self.queue.is_task_deferred(task):
+            self.queue.remove_from_deferred(task)
+
+        task.set_failed(exception, str(exception))
+
         task.callbacks.execute_on_failed(task)
         self._on_task_finished(task)
 
         for child in filter(lambda t: t.state.is_blocked, task.children):
             self._on_task_failed(child, TaskParentError(f'Parent {task.name} failed.'))
-
-        if self.queue.is_task_deferred(task):
-            self.queue.remove_from_deferred(task)
-
-        task.set_failed(exception, str(exception))
 
     @Slot(object)
     def _on_task_completed(self, task: TaskUnit, *, autostart: bool = True) -> None:
@@ -393,12 +411,6 @@ class TaskExecutor(QObject):
 
         if autostart:
             self.start_workers()
-
-    @Slot(object)
-    def _on_task_started(self, task: TaskUnit) -> None:
-        task.callbacks.execute_on_start(task)
-        self.callbacks.runner_started.emit(task)
-        task.state.set_running()
 
     @Slot(object)
     def _on_task_finished(self, task: TaskUnit) -> None:
@@ -419,12 +431,6 @@ class TaskExecutor(QObject):
 
         task.state.set_waiting()
 
-        signals = task.runner.signals
-        signals.runner_failed.connect(self._on_task_failed, Qt.QueuedConnection)
-        signals.runner_completed.connect(self._on_task_completed, Qt.QueuedConnection)
-        signals.runner_started.connect(self._on_task_started, Qt.QueuedConnection)
-        signals.group_task_added.connect(self._on_add_tasks)
-
     def add_task(self, task: TaskUnit) -> TaskUnit:
         if self._is_shutting_down:
             LOGGER.warning('Task manager is shutting down. Cannot add new task')
@@ -439,23 +445,44 @@ class TaskExecutor(QObject):
         LOGGER.info('Adding task to queue: %s', task.name)
 
         self.registry.add(task)
+
+        signals = task.runner.signals
+        signals.runner_failed.connect(self._on_task_failed, Qt.QueuedConnection)
+        signals.runner_completed.connect(self._on_task_completed, Qt.QueuedConnection)
+        signals.group_task_added.connect(self._on_add_tasks)
+
         self._initialize_task(task)
 
         return task
 
-    def _start_worker(self) -> None:
-        task = self.queue.dequeue()
+    def _has_free_worker(self) -> bool:
+        return self._threadpool.activeThreadCount() <= self.max_workers
 
+    def _dispatch(self, task: TaskUnit) -> None:
         if self._blocker.should_block(task):
             LOGGER.info(f'{task.name} is on hold')
             return
 
+        # Running from here on, so the task cannot be removed once it is in the pool.
+        task.state.set_running()
+        if task in self._policy_retries:
+            self._policy_retries.discard(task)
+        else:
+            task.callbacks.execute_on_start(task)
+        self.callbacks.runner_started.emit(task)
+
         self._threadpool.start(task.runner)
+
+    def _start_task(self, task: TaskUnit) -> None:
+        """Start this task now if a worker is free; otherwise it waits in the queue."""
+        if self._has_free_worker():
+            self.queue.remove_from_queue(task)
+            self._dispatch(task)
 
     def start_workers(self) -> None:
         """Start the workers."""
-        while self.queue.size() and self._threadpool.activeThreadCount() <= self.max_workers:
-            self._start_worker()
+        while self.queue.size() and self._has_free_worker():
+            self._dispatch(self.queue.dequeue())
 
     def get_all_tasks(self) -> Set[TaskUnit]:
         return self.registry

@@ -380,7 +380,6 @@ def test_retry_cascades_to_failed_group(qtbot: QtBot, app: TQManager):
     assert group.state.is_completed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V56')
 def test_callbacks_during_retries(qtbot: QtBot, app: TQManager):
     """
     Test that task callbacks are properly triggered during retry cycles.

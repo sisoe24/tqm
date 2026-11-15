@@ -33,7 +33,9 @@ class BaseRunner(QRunnable):
     def __init__(self) -> None:
         super().__init__()
         self.signals = RunnerSignals()
-        self.setAutoDelete(True)
+        # The task keeps one runner for its whole life. With auto delete, Qt frees it
+        # after each run, and a retry can then reuse a freed address and crash.
+        self.setAutoDelete(False)
 
     def __str__(self) -> str:
         return f'<{self.__class__.__name__} {hex(id(self))}>'
@@ -51,8 +53,6 @@ class GroupRunner(BaseRunner):
     @Slot()
     def run(self) -> None:
         LOGGER.debug('%s: Started', self.group.name)
-        self.signals.runner_started.emit(self.group)
-
         # add all tasks from the main thread
         self.signals.group_task_added.emit(self.group.tasks)
 
@@ -83,7 +83,6 @@ class TaskRunner(BaseRunner):
 
         try:
             LOGGER.debug('%s: Started', self.task.name)
-            self.signals.runner_started.emit(self.task)
             self.task.execute(self.task)
 
         except Exception as e:

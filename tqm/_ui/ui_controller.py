@@ -207,7 +207,8 @@ class TaskManagerController(QObject):
     @Slot()
     def _on_retry_selected(self) -> None:
         for task in self.get_selected_tasks():
-            self._executor.retry_task(task)
+            if task.state.is_retryable:
+                self._executor.retry_task(task)
 
     def add_task(self, task: TaskUnit) -> None:
         task.item = self.view.tree_view.tasks_model.add_task(task)

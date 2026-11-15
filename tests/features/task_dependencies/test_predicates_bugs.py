@@ -28,7 +28,6 @@ def passes_on_call(call: int) -> Any:
     return condition
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V9')
 def test_timer_stops_when_a_blocked_child_fails(
     qtbot: QtBot,
     executor: TaskExecutor,
@@ -54,7 +53,6 @@ def test_timer_stops_when_a_blocked_child_fails(
     assert isinstance(child.exception, TaskParentError)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V9')
 def test_passing_predicate_does_not_revive_a_failed_child(
     qtbot: QtBot,
     executor: TaskExecutor,

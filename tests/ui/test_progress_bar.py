@@ -9,6 +9,7 @@ from PySide2.QtWidgets import QTreeView, QStyleOptionProgressBar
 
 from tqm import TQManager, TaskBuilder
 from tqm._core.task import TaskGroup, TaskExecutable
+from tqm._core.task_state import TaskStateEnum
 from tqm._ui.ui_view_model import TaskTreeView
 from tqm._core.task_builder import TaskGroupBuilder
 from tqm._ui.progress_bar_delegate import (ProgressBarAnimator,
@@ -57,14 +58,14 @@ def task() -> TaskExecutable:
 @pytest.fixture
 def completed_task(task: TaskExecutable) -> TaskExecutable:
     """Create a completed task for testing."""
-    task.state.set_completed()
+    task.state.current = TaskStateEnum.COMPLETED
     return task
 
 
 @pytest.fixture
 def failed_task(task: TaskExecutable) -> TaskExecutable:
     """Create a failed task for testing."""
-    task.state.set_failed('Error')
+    task.state.current = TaskStateEnum.FAILED
     return task
 
 
@@ -180,7 +181,7 @@ class TestProgressBarRenderer:
         task_group: TaskGroup
     ):
         """Test group state configuration."""
-        task_group.state.set_running()
+        task_group.state.current = TaskStateEnum.RUNNING
         renderer.handle_completed_state(pbar_option, task_group, 1)
 
         assert 'Group:' in pbar_option.text
@@ -226,10 +227,10 @@ class TestProgressBarDelegate:
             view.tasks_model.add_task(task)
         view.expandAll()
 
-        determinate.state.set_running()
-        indeterminate.state.set_running()
-        completed.state.set_completed()
-        failed.state.set_failed('Error')
+        determinate.state.current = TaskStateEnum.RUNNING
+        indeterminate.state.current = TaskStateEnum.RUNNING
+        completed.state.current = TaskStateEnum.COMPLETED
+        failed.state.current = TaskStateEnum.FAILED
 
         timer = view.findChild(ProgressBarAnimator).findChild(QTimer)
         assert not timer.isActive()

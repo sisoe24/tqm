@@ -14,7 +14,6 @@ from ...utils import run_events
 from ...utils.harness import StepPool
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V14')
 def test_retry_of_a_running_task_does_not_run_it_twice(
     qtbot: QtBot,
     app: TQManager,
@@ -42,7 +41,6 @@ def test_retry_of_a_running_task_does_not_run_it_twice(
     assert second_run == 1
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V14')
 def test_retry_during_the_delay_adds_no_run(executor: TaskExecutor, step_pool: StepPool):
     runs: List[int] = []
 
@@ -65,7 +63,6 @@ def test_retry_during_the_delay_adds_no_run(executor: TaskExecutor, step_pool: S
     assert len(runs) == 2
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V14')
 def test_retry_does_not_resurrect_a_deleted_task(executor: TaskExecutor, step_pool: StepPool):
     runs: List[int] = []
     task = TaskBuilder('T').with_event(lambda t: runs.append(1)).build()

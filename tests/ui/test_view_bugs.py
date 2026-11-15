@@ -138,7 +138,6 @@ def test_context_remove_ignores_another_selected_row(app: TQManager, view: TaskT
     assert top_rows(view) == ['Aaa']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V25')
 def test_progress_survives_a_retry(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     release = gate()
 

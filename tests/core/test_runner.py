@@ -18,15 +18,11 @@ class TestTaskRunner:
         runner = TaskRunner(task)
 
         # Connect to signals
-        runner.signals.runner_started.connect(lambda _: signals_received.append('started'))
         runner.signals.runner_completed.connect(lambda _: signals_received.append('completed'))
 
-        # Run the task
         runner.run()
 
-        # Check signal order
-        assert signals_received[0] == 'started'
-        assert signals_received[1] == 'completed'
+        assert signals_received.to_list() == ['completed']
 
     def test_task_runner_exception(self, qtbot: QtBot):
         """Test that the TaskRunner properly handles exceptions."""
@@ -40,7 +36,6 @@ class TestTaskRunner:
         runner = TaskRunner(task)
 
         # Connect to signals
-        runner.signals.runner_started.connect(lambda _: signals_received.append('started'))
         runner.signals.runner_failed.connect(
             lambda t, e: (signals_received.append('failed'), exceptions_caught.append(str(e)))
         )
@@ -48,9 +43,7 @@ class TestTaskRunner:
         # Run the task
         runner.run()
 
-        # Check signal order
-        assert signals_received[0] == 'started'
-        assert signals_received[1] == 'failed'
+        assert signals_received.to_list() == ['failed']
         assert 'Task failed intentionally' in exceptions_caught[0]
 
     def test_callback_execution(self, qtbot: QtBot, app: TQManager):
