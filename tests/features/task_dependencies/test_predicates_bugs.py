@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 from typing import Any, List, Dict
 
-import pytest
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskExecutor
@@ -72,7 +71,6 @@ def test_passing_predicate_does_not_revive_a_failed_child(
     assert child.state.is_failed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V10')
 def test_predicate_failure_with_retry_policy_reaches_idle(qtbot: QtBot, app: TQManager):
     idle: List[int] = []
     app.callbacks.on_system_idle(lambda: idle.append(1))
@@ -86,7 +84,6 @@ def test_predicate_failure_with_retry_policy_reaches_idle(qtbot: QtBot, app: TQM
     assert idle
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V11')
 def test_task_whose_predicate_passed_on_a_tick_is_removable(qtbot: QtBot, app: TQManager):
     task = noop_task('T').with_predicate(passes_on_call(2), max_attempts=5, delay_ms=1).build()
     app.add_tasks(task)
@@ -101,7 +98,6 @@ def test_task_whose_predicate_passed_on_a_tick_is_removable(qtbot: QtBot, app: T
     assert task.state.is_deleted
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V12')
 def test_predicate_with_wrong_signature_fails_only_its_task(
     executor: TaskExecutor,
     step_pool: StepPool
@@ -120,7 +116,6 @@ def test_predicate_with_wrong_signature_fails_only_its_task(
     assert good.state.is_completed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V12')
 def test_predicate_raising_on_a_tick_fails_the_task(qtbot: QtBot, app: TQManager):
     calls: List[int] = []
 
@@ -137,13 +132,12 @@ def test_predicate_raising_on_a_tick_fails_the_task(qtbot: QtBot, app: TQManager
         app.start_workers()
         run_events(qtbot, 100)
         failed, ticks = task.state.is_failed, len(calls)
-        task.predicate.timer.stop()
 
     assert failed
     assert ticks == 2
+    assert task.predicate.timer is None or not task.predicate.timer.isActive()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V34')
 def test_task_built_off_main_thread_evaluates_its_predicate(qtbot: QtBot, app: TQManager):
     built: Dict[str, Any] = {}
 
@@ -161,7 +155,6 @@ def test_task_built_off_main_thread_evaluates_its_predicate(qtbot: QtBot, app: T
     assert built['task'].state.is_completed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V47')
 def test_retry_evaluates_a_predicate_that_passed_on_a_tick(
     qtbot: QtBot,
     executor: TaskExecutor,

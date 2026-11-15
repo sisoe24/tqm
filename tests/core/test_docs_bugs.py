@@ -28,14 +28,16 @@ def test_readme_uses_existing_builder_methods():
         assert hasattr(TaskBuilder, name), name
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V54')
+V54 = pytest.mark.xfail(strict=True, raises=AssertionError, reason='V54')
+
+
 @pytest.mark.parametrize('stale', [
-    'from tqm.retry_policy import',
-    'LinearOffset',
+    pytest.param('from tqm.retry_policy import', marks=V54),
+    pytest.param('LinearOffset', marks=V54),
     'lambda _: os.path.exists',
     'retry_interval_ms',
-    '`with_file`',
-    'task.update_progress',
+    pytest.param('`with_file`', marks=V54),
+    pytest.param('task.update_progress', marks=V54),
 ])
 def test_docstrings_show_working_examples(stale: str):
     assert stale not in Path(task_builder.__file__).read_text()

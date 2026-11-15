@@ -19,45 +19,40 @@ class PredicateEventType(Enum):
 
 @dataclass
 class TaskPredicate:
-    condition: Optional[Callable[..., bool]] = None
+    condition: Optional[Callable[[], bool]] = None
     max_retries: int = 2
     retry_interval: int = 1000
 
-    timer: QTimer = field(init=False, repr=False)
+    # Created on first use, so it belongs to the main thread even when the task was built elsewhere.
+    timer: Optional[QTimer] = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
-        self.timer = QTimer()
-        self.timer.setInterval(self.retry_interval)
         self.retry_left = self.max_retries
+        self.passed = False
 
     def reset(self) -> None:
+        self.stop()
         self.retry_left = self.max_retries
+        self.passed = False
 
     def delete(self) -> None:
-        if self.timer.isActive():
-            self.timer.stop()
-            self.timer.deleteLater()
+        self.stop()
         self.condition = None
 
-    def stop_timer(self) -> None:
-        if self.timer.isActive():
+    def stop(self) -> None:
+        if self.timer is not None:
             self.timer.stop()
-            self.timer.timeout.disconnect()
+            self.timer.deleteLater()
+            self.timer = None
 
-    def evaluate(self, predicate_handler: Callable[[PredicateEventType], Any]) -> None:
-        """Evaluate the predicate condition with retry logic.
+    def evaluate(self, predicate_handler: Callable[..., Any]) -> None:
+        """Check the condition on a timer until it passes or the attempts run out.
 
-        This method checks if the predicate condition is met. If not, it will retry
-        according to the configured retry settings. The status_notifier callback
-        is called with different PredicateEventType values to report the state.
-
-        Args:
-            status_notifier: Callback function that receives status updates
-
-        NOTE: See TaskExecutor._handle_predicate for an example
+        The handler gets a PredicateEventType, and for FAIL the exception the condition
+        raised, if any. Call this on the main thread. See TaskExecutor._on_predicate_event.
         """
         condition = self.condition
-        if condition is None:
+        if condition is None or self.timer is not None:
             return
 
         if self.retry_left <= 0:
@@ -67,18 +62,25 @@ class TaskPredicate:
         def _evaluate() -> None:
             self.retry_left -= 1
             predicate_handler(PredicateEventType.RETRY)
+            try:
+                passed = condition()
+            except Exception as e:
+                self.stop()
+                predicate_handler(PredicateEventType.FAIL, e)
+                return
 
-            if condition():
-                self.delete()
+            if passed:
+                self.stop()
+                self.passed = True
                 predicate_handler(PredicateEventType.SUCCESS)
-
             elif self.retry_left <= 0:
-                self.stop_timer()
+                self.stop()
                 predicate_handler(PredicateEventType.FAIL)
 
-        if not self.timer.isActive():
-            self.timer.timeout.connect(_evaluate)
-            self.timer.start()
+        self.timer = QTimer()
+        self.timer.setInterval(self.retry_interval)
+        self.timer.timeout.connect(_evaluate)
+        self.timer.start()
 
     def inspect(self) -> Dict[str, Any]:
         return {

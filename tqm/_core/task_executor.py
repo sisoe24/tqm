@@ -119,73 +119,6 @@ class _ExecutorCallbacks(RunnerSignals):
         self.status_updated.connect(callback, Qt.QueuedConnection)
 
 
-class _ExecutorBlocker(QObject):
-    predicate_successful = Signal(object)
-    predicate_failed = Signal(object, Exception)
-
-    def __init__(self, executor: TaskExecutor, parent: Optional[QObject] = None) -> None:
-        super().__init__(parent)
-        self._executor = executor
-
-    def _handle_predicate(
-        self,
-        task: TaskUnit,
-        predicate_event: PredicateEventType
-    ) -> None:
-        # A predicate timer can outlive its task's wait, for example after a parent failed.
-        if not (task.state.is_blocked or task.state.is_retrying):
-            return
-
-        if predicate_event == PredicateEventType.SUCCESS:
-            LOGGER.info(f"{task.name} predicate passed")
-            self.predicate_successful.emit(task)
-
-        elif predicate_event == PredicateEventType.FAIL:
-            self.predicate_failed.emit(task, TaskPredicateError(task.name))
-
-        elif predicate_event == PredicateEventType.RETRY:
-            task.state.set_retrying(f'Attempts left: {task.predicate.retry_left}')
-            LOGGER.info(
-                f'{task.name} retrying in {task.predicate.retry_interval}ms. '
-                f'Retries left: {task.predicate.retry_left}'
-            )
-        else:
-            raise TaskPredicateError('Unknown predicate event')
-
-    def _block_task_with_predicate(self, task: TaskUnit) -> bool:
-        """Blocks the given task if its predicate is not resolved."""
-        if not task.predicate.condition or task.predicate.condition():
-            return False
-
-        LOGGER.info(f'{task.name} predicate failed')
-        task.state.set_blocked('Predicate failed')
-        return True
-
-    def _block_task_with_parent(self, task: TaskUnit) -> bool:
-        """Blocks the given task if its parent task is not completed."""
-        if not task.parent:
-            return False
-
-        if not task.parent.state.is_completed and not task.state.is_inactive:
-            LOGGER.info(f'{task.name} waiting for {task.parent.name}')
-            task.state.set_blocked(f'Waiting for parent: {task.parent.name}')
-            return True
-
-        return False
-
-    def should_block(self, task: TaskUnit) -> bool:
-        if self._block_task_with_predicate(task):
-            self._executor.queue.suspend(task)
-            task.predicate.evaluate(partial(self._handle_predicate, task))
-            return True
-
-        if self._block_task_with_parent(task):
-            self._executor.queue.suspend(task)
-            return True
-
-        return False
-
-
 class _ExecutorStateTracker(QObject):
     def __init__(self, executor: TaskExecutor, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -266,10 +199,6 @@ class TaskExecutor(QObject):
         self._threadpool.setMaxThreadCount(self.max_workers+1)
         self._shutdown_thread = ShutdownThread(self._threadpool)
 
-        self._blocker = _ExecutorBlocker(self)
-        self._blocker.predicate_failed.connect(self._on_task_failed)
-        self._blocker.predicate_successful.connect(self._predicate_success)
-
         self.retry_handler = RetryHandler(self._on_retry_due)
 
         self.registry: Set[TaskUnit] = set()
@@ -290,9 +219,51 @@ class TaskExecutor(QObject):
         self.max_workers = value
         self._threadpool.setMaxThreadCount(self.max_workers+1)
 
-    def _predicate_success(self, task: TaskUnit) -> None:
-        self.queue.promote_to_main(task)
-        self.start_workers()
+    def _on_predicate_event(
+        self,
+        task: TaskUnit,
+        event: PredicateEventType,
+        error: Optional[Exception] = None
+    ) -> None:
+        # A predicate timer can outlive its task's wait, for example after a parent failed.
+        if not (task.state.is_blocked or task.state.is_retrying):
+            return
+
+        if event == PredicateEventType.SUCCESS:
+            LOGGER.info(f'{task.name} predicate passed')
+            self.queue.promote_to_main(task)
+            self.start_workers()
+
+        elif event == PredicateEventType.FAIL:
+            self._on_task_failed(task, TaskPredicateError(f'{task.name}: {error or "predicate failed"}'))
+
+        elif event == PredicateEventType.RETRY:
+            task.state.set_retrying(f'Attempts left: {task.predicate.retry_left}')
+            LOGGER.info(
+                f'{task.name} retrying in {task.predicate.retry_interval}ms. '
+                f'Retries left: {task.predicate.retry_left}'
+            )
+
+    def _predicate_passes(self, task: TaskUnit) -> bool:
+        """Check the predicate once. If it is false, block the task and keep checking on a timer."""
+        predicate = task.predicate
+        if predicate.condition is None or predicate.passed:
+            return True
+
+        try:
+            passed = predicate.condition()
+        except Exception as e:
+            self._handle_failure(task, TaskPredicateError(f'{task.name}: {e}'))
+            return False
+
+        if passed:
+            return True
+
+        LOGGER.info(f'{task.name} predicate failed')
+        task.state.set_blocked('Predicate failed')
+        self.queue.suspend(task)
+        predicate.evaluate(partial(self._on_predicate_event, task))
+        return False
 
     def _remove_and_cleanup_task(self, task: TaskUnit) -> None:
         task.delete()
@@ -372,10 +343,16 @@ class TaskExecutor(QObject):
     @Slot(object)
     def _on_task_failed(self, task: TaskUnit, exception: Exception) -> None:
         """Handle a failed task. If its retry policy allows, it is retried later."""
+        self._handle_failure(task, exception)
+        self.start_workers()
+
+    def _handle_failure(self, task: TaskUnit, exception: Exception) -> None:
+        # A task blocked by its predicate waits in the deferred queue.
+        with contextlib.suppress(TaskNotFoundError):
+            self.queue.remove_task(task)
+
         if not self.retry_handler.handle_failure(task, exception):
             self._fail_task(task, exception)
-
-        self.start_workers()
 
     def _fail_task(self, task: TaskUnit, exception: Exception) -> None:
         """Fail a task for good, and every child still waiting for it."""
@@ -384,6 +361,7 @@ class TaskExecutor(QObject):
         with contextlib.suppress(TaskNotFoundError):
             self.queue.remove_task(task)
 
+        task.predicate.stop()
         task.set_failed(exception, str(exception))
 
         task.callbacks.execute_on_failed(task)
@@ -476,8 +454,14 @@ class TaskExecutor(QObject):
             self._fail_task(task, TaskParentError(f'Parent {parent.name} was never added.'))
             return
 
-        if self._blocker.should_block(task):
-            LOGGER.info(f'{task.name} is on hold')
+        if parent and not parent.state.is_completed:
+            LOGGER.info(f'{task.name} waiting for {parent.name}')
+            task.state.set_blocked(f'Waiting for parent: {parent.name}')
+            self.queue.suspend(task)
+            return
+
+        # After the parent check, so attempts are not used up while the parent runs.
+        if not self._predicate_passes(task):
             return
 
         # Running from here on, so the task cannot be removed once it is in the pool.

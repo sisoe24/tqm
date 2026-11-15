@@ -5,7 +5,6 @@ from typing import Callable
 from itertools import count
 from threading import Event
 
-import pytest
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, exceptions
@@ -138,11 +137,6 @@ def test_predicate_waits_for_interval(qtbot: QtBot, app: TQManager):
     assert checks[2] - checks[1] >= 0.09
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='tqm-nav.7.7'
-)
 def test_predicate_waits_for_slow_parent(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     """Test that a parent still running does not use up the child's predicate attempts."""
     release = gate()

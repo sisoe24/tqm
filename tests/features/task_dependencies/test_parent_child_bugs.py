@@ -82,7 +82,8 @@ def test_child_in_predicate_retrying_fails_with_parent(
     executor.add_task(parent)
     executor.add_task(child)
     executor.start_workers()
-    qtbot.wait_until(lambda: child.state.is_retrying)
+    # Since R3 the predicate waits for the parent, so the child is blocked, not retrying.
+    qtbot.wait_until(lambda: child.state.is_blocked or child.state.is_retrying)
 
     step_pool.drain()
     ready[0] = True

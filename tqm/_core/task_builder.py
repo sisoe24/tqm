@@ -104,11 +104,11 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
     ) -> Builder:
         """Predicate to be executed before the task is started.
 
-        >>> with_predicate(lambda _: os.path.exists('file.txt'), max_retries=2, retry_interval_ms=2000)
+        >>> with_predicate(lambda: os.path.exists('file.txt'), max_attempts=2, delay_ms=2000)
 
-        If the predicate returns False, the task will not be executed. If
-        `max_retries` is set, the task will be retried that many times every
-        `retry_interval_ms` milliseconds.
+        The condition takes no arguments. If it returns False, the task waits and the
+        condition is checked again up to `max_attempts` times, every `delay_ms`
+        milliseconds. If it raises, the task fails.
 
         """
         self.predicate_condition = condition
