@@ -85,7 +85,8 @@ class TaskRunner(BaseRunner):
             LOGGER.debug('%s: Started', self.task.name)
             self.task.execute(self.task)
 
-        except Exception as e:
+        # BaseException too: SystemExit in a task must not leave it running.
+        except BaseException as e:
             LOGGER.debug('%s: Failed. Exception: %s', self.task.name, str(e))
             self.signals.runner_failed.emit(self.task, e)
 

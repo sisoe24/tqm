@@ -63,7 +63,7 @@ def format_duration(seconds: float) -> str:
 _S = TaskStateEnum
 ALLOWED_TRANSITIONS: Dict[TaskStateEnum, FrozenSet[TaskStateEnum]] = {
     _S.INACTIVE: frozenset({_S.WAITING, _S.DELETED}),
-    _S.WAITING: frozenset({_S.RUNNING, _S.BLOCKED, _S.DELETED}),
+    _S.WAITING: frozenset({_S.RUNNING, _S.BLOCKED, _S.FAILED, _S.DELETED}),
     _S.BLOCKED: frozenset({_S.WAITING, _S.RUNNING, _S.RETRYING, _S.FAILED}),
     _S.RETRYING: frozenset({_S.INACTIVE, _S.RUNNING, _S.BLOCKED, _S.FAILED}),
     _S.RUNNING: frozenset({_S.COMPLETED, _S.FAILED, _S.RETRYING}),

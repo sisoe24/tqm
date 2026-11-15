@@ -22,9 +22,6 @@ def bug(reason: str, script: str, timeout: float = 30) -> pytest.param:
     bug('V33', 'v33_set_mutated_during_poll'),
     bug('V35', 'v35_dropped_managers'),
     bug('V38', 'v38_retry_all_race'),
-    bug('V49', 'v49_member_waits_for_group'),
-    bug('V49', 'v49_group_waits_for_member'),
-    bug('V49', 'v49_parent_never_added'),
     bug('V50', 'v50_two_groups'),
     bug('V50', 'v50_late_add'),
     bug('V50', 'v50_nested_group_removed'),
@@ -35,7 +32,14 @@ def test_script_passes(script: str, timeout: float):
 
 
 # v1_gc_on_worker covers only the retry part of V1. The rest of V1 stays open until R5.
-@pytest.mark.parametrize('script', ['v1_gc_on_worker', 'v14_retry_waiting', 'retry_right_after_failure'])
+@pytest.mark.parametrize('script', [
+    'v1_gc_on_worker',
+    'v14_retry_waiting',
+    'retry_right_after_failure',
+    'v49_member_waits_for_group',
+    'v49_group_waits_for_member',
+    'v49_parent_never_added',
+])
 def test_fixed_script_passes(script: str):
     assert_script_passes(SCRIPTS / f'{script}.py')
 

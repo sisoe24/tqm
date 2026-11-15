@@ -7,7 +7,7 @@ from functools import partial
 
 from PySide2.QtCore import Qt, Slot, QTimer, Signal, QObject
 
-from .task import TaskUnit, TaskExecutable
+from .task import TaskUnit, TaskGroup, TaskExecutable
 from .queue import TasksQueue, TaskNotFoundError
 from .logger import LOGGER
 from .shutdown import ShutdownThread
@@ -371,29 +371,27 @@ class TaskExecutor(QObject):
 
     @Slot(object)
     def _on_task_failed(self, task: TaskUnit, exception: Exception) -> None:
-        """Handle a failed task.
+        """Handle a failed task. If its retry policy allows, it is retried later."""
+        if not self.retry_handler.handle_failure(task, exception):
+            self._fail_task(task, exception)
 
-        If the task can be retried, it will be re-added to the queue.
+        self.start_workers()
 
-        Returns:
-            str: The exception message if any
-
-        """
-        if self.retry_handler.handle_failure(task, exception):
-            return
-
+    def _fail_task(self, task: TaskUnit, exception: Exception) -> None:
+        """Fail a task for good, and every child still waiting for it."""
         LOGGER.error(f'{task.name} failed: {exception}')
 
-        if self.queue.is_task_deferred(task):
-            self.queue.remove_from_deferred(task)
+        with contextlib.suppress(TaskNotFoundError):
+            self.queue.remove_task(task)
 
         task.set_failed(exception, str(exception))
 
         task.callbacks.execute_on_failed(task)
         self._on_task_finished(task)
 
-        for child in filter(lambda t: t.state.is_blocked, task.children):
-            self._on_task_failed(child, TaskParentError(f'Parent {task.name} failed.'))
+        for child in task.children.copy():
+            if child.state.is_waiting or child.state.is_blocked or child.state.is_retrying:
+                self._fail_task(child, TaskParentError(f'Parent {task.name} failed.'))
 
     @Slot(object)
     def _on_task_completed(self, task: TaskUnit, *, autostart: bool = True) -> None:
@@ -439,6 +437,11 @@ class TaskExecutor(QObject):
         if task in self.registry:
             raise TaskAlreadyInQueue(f'Task "{task}" already in queue')
 
+        if isinstance(task, TaskGroup) and (
+            task.parent in task.tasks or any(member.parent is task for member in task.tasks)
+        ):
+            raise TaskError(f'Group {task.name} and one of its members wait for each other')
+
         if isinstance(task, TaskExecutable):
             task.state.register_state_change_callback(self.status_tracker.update_status)
 
@@ -458,7 +461,21 @@ class TaskExecutor(QObject):
     def _has_free_worker(self) -> bool:
         return self._threadpool.activeThreadCount() <= self.max_workers
 
+    def _is_known(self, task: TaskUnit) -> bool:
+        """True if the task was added, directly or through its group."""
+        group = getattr(task, 'group', None)
+        return task in self.registry or (group is not None and self._is_known(group))
+
     def _dispatch(self, task: TaskUnit) -> None:
+        parent = task.parent
+        if parent and parent.state.is_failed:
+            self._fail_task(task, TaskParentError(f'Parent {parent.name} failed.'))
+            return
+
+        if parent and not self._is_known(parent):
+            self._fail_task(task, TaskParentError(f'Parent {parent.name} was never added.'))
+            return
+
         if self._blocker.should_block(task):
             LOGGER.info(f'{task.name} is on hold')
             return

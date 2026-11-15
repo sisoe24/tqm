@@ -4,6 +4,7 @@ from typing import Any, Dict, Generic, TypeVar, Callable, Optional
 from dataclasses import dataclass
 
 from ..utils import extract_fn_name
+from .logger import LOGGER
 
 T = TypeVar('T')
 
@@ -43,7 +44,11 @@ class TaskCallbacks(Generic[T]):
         if not config or not config.callback:
             return False
 
-        config.callback(task)
+        # A raising callback must not leave the task or its children stuck.
+        try:
+            config.callback(task)
+        except Exception:
+            LOGGER.exception('Callback %s raised', extract_fn_name(config.callback))
         return config.cleanup
 
     def execute_on_start(self, task: T) -> None:

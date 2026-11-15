@@ -12,7 +12,6 @@ from ..utils import raise_error
 from ..utils.harness import StepPool
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V5')
 def test_queued_tasks_run_after_failures(executor: TaskExecutor, step_pool: StepPool):
     executor.set_max_workers(2)
     tasks = [TaskBuilder().with_event(raise_error).build() for _ in range(8)]

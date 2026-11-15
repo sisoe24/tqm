@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 
-import pytest
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskExecutor
@@ -16,7 +15,6 @@ def noop_task(name: str = '') -> TaskBuilder:
     return TaskBuilder(name).with_event(lambda t: None)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V6')
 def test_child_of_already_failed_parent_fails(executor: TaskExecutor, step_pool: StepPool):
     parent = TaskBuilder('P').with_event(raise_error).build()
     executor.add_task(parent)
@@ -32,7 +30,6 @@ def test_child_of_already_failed_parent_fails(executor: TaskExecutor, step_pool:
     assert isinstance(child.exception, TaskParentError)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V6')
 def test_child_still_in_heap_when_parent_fails_fails(executor: TaskExecutor, step_pool: StepPool):
     executor.set_max_workers(2)
     parent = TaskBuilder('P').with_event(raise_error).build()
@@ -48,7 +45,6 @@ def test_child_still_in_heap_when_parent_fails_fails(executor: TaskExecutor, ste
     assert isinstance(child.exception, TaskParentError)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V7')
 def test_child_with_retry_policy_burns_no_retries(
     qtbot: QtBot,
     executor: TaskExecutor,
@@ -70,7 +66,6 @@ def test_child_with_retry_policy_burns_no_retries(
     assert grandchild.state.is_failed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V8')
 def test_child_in_predicate_retrying_fails_with_parent(
     qtbot: QtBot,
     executor: TaskExecutor,
@@ -96,7 +91,6 @@ def test_child_in_predicate_retrying_fails_with_parent(
     assert child.state.is_failed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V13')
 def test_raising_on_failed_still_fails_the_task(
     qtbot: QtBot,
     executor: TaskExecutor,
@@ -118,7 +112,6 @@ def test_raising_on_failed_still_fails_the_task(
     assert child.state.is_failed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V13')
 def test_raising_on_completed_still_unblocks_children(
     qtbot: QtBot,
     executor: TaskExecutor,
@@ -143,7 +136,6 @@ class Stop(BaseException):
     pass
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V13')
 def test_base_exception_in_task_does_not_leave_it_running(qtbot: QtBot, app: TQManager):
     def stop(task: object) -> None:
         raise Stop
@@ -159,7 +151,6 @@ def test_base_exception_in_task_does_not_leave_it_running(qtbot: QtBot, app: TQM
     assert task.state.is_failed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V40')
 def test_remove_task_is_atomic(executor: TaskExecutor, step_pool: StepPool):
     parent = TaskBuilder('P').with_event(raise_error).build()
     child = noop_task('C').with_wait_for(parent).build()
