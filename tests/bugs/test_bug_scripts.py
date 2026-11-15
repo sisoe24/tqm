@@ -42,7 +42,6 @@ def test_fixed_script_passes(script: str):
     assert_script_passes(SCRIPTS / f'{script}.py')
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V32')
 def test_add_from_worker_raises():
     # Racy crash: 5 clean attempts are what proves the fix.
     for _ in range(5):

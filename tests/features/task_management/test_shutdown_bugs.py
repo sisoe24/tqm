@@ -106,7 +106,6 @@ def test_toolbar_retry_is_gated_during_shutdown(qtbot: QtBot, app: TQManager, ga
     assert len(runs) == 1
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V72')
 def test_add_tasks_is_gated_during_shutdown(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     release = gate()
     running = TaskBuilder('R').with_event(lambda t: release.wait()).build()

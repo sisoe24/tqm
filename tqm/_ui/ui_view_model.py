@@ -65,11 +65,6 @@ class TreeModel(QStandardItemModel):
         ]
 
     def _configure_group_item(self, task_group: TaskGroup) -> None:
-        if not task_group.tasks:
-            raise TaskGroupError(
-                f'Cannot add TaskGroup "{task_group.name}" without any tasks'
-            )
-
         task_group.progress_bar.maximum = len(task_group.tasks)
 
         group_item = task_group.item

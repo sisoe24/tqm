@@ -111,7 +111,6 @@ class TQManager(QMainWindow):
         """
         for task in tasks:
             self.executor.add_task(task)
-            self.callbacks.task_added.emit(task)
 
     def add_event(
         self,

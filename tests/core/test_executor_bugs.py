@@ -4,6 +4,7 @@ import contextlib
 from typing import Any, List
 
 import pytest
+from PySide2.QtWidgets import QApplication
 
 from tqm import TaskBuilder, TaskExecutor
 from tqm._core.task_state import TaskState
@@ -24,7 +25,6 @@ def test_queued_tasks_run_after_failures(executor: TaskExecutor, step_pool: Step
     assert all(task.state.is_failed for task in tasks)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V17')
 def test_manager_on_task_failed_fires(executor: TaskExecutor, step_pool: StepPool):
     failed: List[Any] = []
     executor.callbacks.on_task_failed(lambda *args: failed.append(args))
@@ -33,8 +33,10 @@ def test_manager_on_task_failed_fires(executor: TaskExecutor, step_pool: StepPoo
 
     executor.start_workers()
     step_pool.drain()
+    # The failure is settled in one event pass, and the queued callback needs another.
+    QApplication.processEvents()
 
-    assert failed
+    assert failed == [(task, task.exception)]
 
 
 def test_on_failed_sees_the_failure(executor: TaskExecutor, step_pool: StepPool):

@@ -9,7 +9,6 @@ from tqm.exceptions import TaskGroupError
 from ...utils import must_raise
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V62')
 def test_empty_group_raises_at_the_caller(qtbot: QtBot, app: TQManager):
     with qtbot.capture_exceptions() as errors:
         with must_raise(TaskGroupError):

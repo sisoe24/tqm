@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import contextlib
 from typing import Any, Set, Dict, Callable, Optional
 from functools import partial
@@ -12,19 +13,24 @@ from .queue import TasksQueue, TaskNotFoundError
 from .logger import LOGGER
 from .shutdown import ShutdownThread
 from .task_retry import RetryHandler
-from ..exceptions import (TaskError, TaskEventError, TaskParentError, TaskAlreadyInQueue,
-                          TaskPredicateError)
+from ..exceptions import (TaskError, TaskEventError, TaskGroupError, TaskParentError,
+                          TaskAlreadyInQueue, TaskPredicateError)
 from .task_runner import TaskRunner, RunnerSignals
 from .task_predicate import PredicateEventType
 from .threadpool_interface import ThreadPoolWrapper, ThreadPoolInterface
 
 
-class _ExecutorCallbacks(RunnerSignals):
+class _ExecutorCallbacks(QObject):
 
     # ui
     task_added = Signal(object)
     task_removed = Signal(object)
     task_finished = Signal(object)
+    task_progress_updated = Signal(object, int)
+
+    runner_started = Signal(object)
+    runner_completed = Signal(object)
+    runner_failed = Signal(object, Exception)
 
     status_updated = Signal(dict)
     system_idle = Signal()
@@ -73,11 +79,11 @@ class _ExecutorCallbacks(RunnerSignals):
         """
         self.task_finished.connect(callback, Qt.QueuedConnection)
 
-    def on_task_failed(self, callback: Callable[[TaskUnit], Any]) -> None:
-        """On task failed callback.
+    def on_task_failed(self, callback: Callable[[TaskUnit, Exception], Any]) -> None:
+        """On task failed callback. It fires once, when the task fails for good.
 
         ```
-        on_task_failed(lambda t: print(f'Task failed: {t.name}'))
+        on_task_failed(lambda t, e: print(f'Task failed: {t.name}: {e}'))
         ```
 
         """
@@ -222,6 +228,7 @@ class TaskExecutor(QObject):
         self._policy_retries: Set[TaskUnit] = set()
 
         self._is_shutting_down = False
+        self._thread_id = threading.get_ident()
 
     @property
     def max_workers(self) -> int:
@@ -383,6 +390,7 @@ class TaskExecutor(QObject):
 
         task.callbacks.execute_on_failed(task)
         self._on_task_finished(task)
+        self.callbacks.runner_failed.emit(task, exception)
 
         for child in task.children.copy():
             if child.state.is_waiting or child.state.is_blocked or child.state.is_retrying:
@@ -420,7 +428,13 @@ class TaskExecutor(QObject):
 
         task.state.set_waiting()
 
+    def _check_thread(self) -> None:
+        if threading.get_ident() != self._thread_id:
+            raise TaskError('Tasks can only be added or started from the main thread')
+
     def add_task(self, task: TaskUnit) -> TaskUnit:
+        self._check_thread()
+
         if self._is_shutting_down:
             LOGGER.warning('Task manager is shutting down. Cannot add new task')
             return task
@@ -428,11 +442,19 @@ class TaskExecutor(QObject):
         if task in self.registry:
             raise TaskAlreadyInQueue(f'Task "{task}" already in queue')
 
+        if isinstance(task, TaskGroup) and not task.tasks:
+            raise TaskGroupError(f'Cannot add TaskGroup "{task.name}" without any tasks')
+
         if isinstance(task, TaskGroup) and (
             task.parent in task.tasks or any(member.parent is task for member in task.tasks)
         ):
             raise TaskError(f'Group {task.name} and one of its members wait for each other')
 
+        self._register(task)
+        self.callbacks.task_added.emit(task)
+        return task
+
+    def _register(self, task: TaskUnit) -> None:
         if isinstance(task, TaskExecutable):
             task.state.register_state_change_callback(self.status_tracker.update_status)
         else:
@@ -446,15 +468,13 @@ class TaskExecutor(QObject):
 
         self._initialize_task(task)
 
-        return task
-
     def _has_free_worker(self) -> bool:
         return self._threadpool.activeThreadCount() < self.max_workers
 
     def _start_group(self, group: TaskGroup) -> None:
         for member in list(group.tasks):
             if member not in self.registry:
-                self.add_task(member)
+                self._register(member)
         self._settle_group(group)
         self.start_workers()
 
@@ -518,6 +538,7 @@ class TaskExecutor(QObject):
 
     def start_workers(self) -> None:
         """Start the workers."""
+        self._check_thread()
         while self.queue.size() and self._has_free_worker():
             self._dispatch(self.queue.dequeue())
 
