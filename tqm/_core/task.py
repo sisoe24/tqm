@@ -4,6 +4,7 @@ from typing import Any, Set, Dict, Union, Callable, Optional
 from dataclasses import field, dataclass
 
 from ..utils import extract_fn_name
+from ..exceptions import TaskGroupError
 from .logger import LOGGER
 from .task_base import TaskBase
 from .task_runner import TaskRunner, GroupRunner
@@ -57,6 +58,10 @@ class TaskGroup(TaskBase['TaskGroup', GroupRunner]):
         return hash(self.id)
 
     def add_tasks(self, *tasks: TaskExecutable) -> None:
+        # Members are registered when the group starts, so a later member would never run.
+        if self.state.is_running:
+            raise TaskGroupError(f'Cannot add tasks to running group {self.name}')
+
         for task in tasks:
             self.tasks.add(task)
             task.group = self

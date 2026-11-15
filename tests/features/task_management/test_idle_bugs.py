@@ -11,7 +11,6 @@ from tqm import TQManager, TaskBuilder, TaskGroupBuilder
 from ...utils import raise_error, run_events
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V45')
 def test_no_idle_while_a_retry_is_pending(qtbot: QtBot, app: TQManager):
     idle: List[int] = []
     app.callbacks.on_system_idle(lambda: idle.append(1))
@@ -26,7 +25,6 @@ def test_no_idle_while_a_retry_is_pending(qtbot: QtBot, app: TQManager):
     assert not idle
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V45')
 def test_idle_fires_for_a_group_failed_by_its_predicate(qtbot: QtBot, app: TQManager):
     idle: List[int] = []
     app.callbacks.on_system_idle(lambda: idle.append(1))
@@ -45,7 +43,6 @@ def test_idle_fires_for_a_group_failed_by_its_predicate(qtbot: QtBot, app: TQMan
     assert idle
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V45')
 def test_no_idle_while_a_group_runs_with_a_short_timeout(
     qtbot: QtBot,
     make_manager: Callable[[str], TQManager],

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import contextlib
-from typing import Any, Set, Dict, List, Callable, Optional
+from typing import Any, Set, Dict, Callable, Optional
 from functools import partial
 
 from PySide2.QtCore import Qt, Slot, QTimer, Signal, QObject
@@ -12,7 +12,7 @@ from .queue import TasksQueue, TaskNotFoundError
 from .logger import LOGGER
 from .shutdown import ShutdownThread
 from .task_retry import RetryHandler
-from ..exceptions import (TaskError, TaskParentError, TaskAlreadyInQueue,
+from ..exceptions import (TaskError, TaskEventError, TaskParentError, TaskAlreadyInQueue,
                           TaskPredicateError)
 from .task_runner import RunnerSignals
 from .task_predicate import PredicateEventType
@@ -126,9 +126,12 @@ class _ExecutorStateTracker(QObject):
         self._state_counts = {
             'waiting': 0,
             'running': 0,
+            'retrying': 0,
             'completed': 0,
             'failed': 0,
         }
+        # Running or retrying groups. They are not in the task counts shown to the user.
+        self._active_groups = 0
 
         self._idle_timer: Optional[QTimer] = None
         self._idle_timeout = int(os.getenv('TQM_IDLE_TIMEOUT', 1000))
@@ -153,10 +156,17 @@ class _ExecutorStateTracker(QObject):
         self._executor.callbacks.status_updated.emit(status)
         self._handle_idle()
 
+    def update_group_status(self, old_state: str, new_state: str) -> None:
+        active = ('running', 'retrying')
+        self._active_groups += (new_state in active) - (old_state in active)
+        self._handle_idle()
+
     def is_idle(self) -> bool:
         return (
             self._state_counts['running'] == 0 and
             self._state_counts['waiting'] == 0 and
+            self._state_counts['retrying'] == 0 and
+            self._active_groups == 0 and
             self._executor.queue.size() == 0 and
             self._executor.queue.size_deferred() == 0
         )
@@ -193,10 +203,10 @@ class TaskExecutor(QObject):
         self.callbacks = _ExecutorCallbacks()
         self.status_tracker = _ExecutorStateTracker(self)
 
-        self._max_workers = max_workers
+        self.max_workers = max_workers
 
         self._threadpool = threadpool or ThreadPoolWrapper(self)
-        self._threadpool.setMaxThreadCount(self.max_workers+1)
+        self._threadpool.setMaxThreadCount(self.max_workers)
         self._shutdown_thread = ShutdownThread(self._threadpool)
 
         self.retry_handler = RetryHandler(self._on_retry_due)
@@ -217,7 +227,7 @@ class TaskExecutor(QObject):
 
     def set_max_workers(self, value: int) -> None:
         self.max_workers = value
-        self._threadpool.setMaxThreadCount(self.max_workers+1)
+        self._threadpool.setMaxThreadCount(self.max_workers)
 
     def _on_predicate_event(
         self,
@@ -301,6 +311,7 @@ class TaskExecutor(QObject):
         self._policy_retries.discard(task)
 
         self._remove_and_cleanup_task(task)
+        self._settle_group(getattr(task, 'group', None))
 
     def retry_task(self, task: TaskUnit) -> None:
         """Retry a failed or completed task by re-adding it to the queue.
@@ -371,6 +382,8 @@ class TaskExecutor(QObject):
             if child.state.is_waiting or child.state.is_blocked or child.state.is_retrying:
                 self._fail_task(child, TaskParentError(f'Parent {task.name} failed.'))
 
+        self._settle_group(getattr(task, 'group', None))
+
     @Slot(object)
     def _on_task_completed(self, task: TaskUnit, *, autostart: bool = True) -> None:
         task.state.set_completed()
@@ -385,6 +398,8 @@ class TaskExecutor(QObject):
             child.state.set_waiting('Unblock from parent')
             self.queue.promote_to_main(child)
 
+        self._settle_group(getattr(task, 'group', None))
+
         if autostart:
             self.start_workers()
 
@@ -392,14 +407,6 @@ class TaskExecutor(QObject):
     def _on_task_finished(self, task: TaskUnit) -> None:
         task.callbacks.execute_on_finish(task)
         self.callbacks.task_finished.emit(task)
-
-    @Slot(list)
-    def _on_add_tasks(self, tasks: List[TaskUnit]) -> None:
-        for task in tasks:
-            if task not in self.registry:
-                self.add_task(task)
-
-        self.start_workers()
 
     def _initialize_task(self, task: TaskUnit) -> None:
 
@@ -422,6 +429,8 @@ class TaskExecutor(QObject):
 
         if isinstance(task, TaskExecutable):
             task.state.register_state_change_callback(self.status_tracker.update_status)
+        else:
+            task.state.register_state_change_callback(self.status_tracker.update_group_status)
 
         LOGGER.info('Adding task to queue: %s', task.name)
 
@@ -430,14 +439,34 @@ class TaskExecutor(QObject):
         signals = task.runner.signals
         signals.runner_failed.connect(self._on_task_failed, Qt.QueuedConnection)
         signals.runner_completed.connect(self._on_task_completed, Qt.QueuedConnection)
-        signals.group_task_added.connect(self._on_add_tasks)
 
         self._initialize_task(task)
 
         return task
 
     def _has_free_worker(self) -> bool:
-        return self._threadpool.activeThreadCount() <= self.max_workers
+        return self._threadpool.activeThreadCount() < self.max_workers
+
+    def _start_group(self, group: TaskGroup) -> None:
+        for member in list(group.tasks):
+            if member not in self.registry:
+                self.add_task(member)
+        self._settle_group(group)
+        self.start_workers()
+
+    def _settle_group(self, group: Optional[TaskGroup]) -> None:
+        """Complete or fail a running group once none of its members can still run."""
+        if group is None or not group.state.is_running:
+            return
+
+        members = [t for t in group.tasks if not t.state.is_deleted]
+        if not all(t.state.is_completed or t.state.is_failed for t in members):
+            return
+
+        if all(t.state.is_completed for t in members):
+            self._on_task_completed(group, autostart=False)
+        else:
+            self._handle_failure(group, TaskEventError('Some tasks failed'))
 
     def _is_known(self, task: TaskUnit) -> bool:
         """True if the task was added, directly or through its group."""
@@ -472,7 +501,10 @@ class TaskExecutor(QObject):
             task.callbacks.execute_on_start(task)
         self.callbacks.runner_started.emit(task)
 
-        self._threadpool.start(task.runner)
+        if isinstance(task, TaskGroup):
+            self._start_group(task)
+        else:
+            self._threadpool.start(task.runner)
 
     def _start_task(self, task: TaskUnit) -> None:
         """Start this task now if a worker is free; otherwise it waits in the queue."""

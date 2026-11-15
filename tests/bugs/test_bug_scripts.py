@@ -16,15 +16,7 @@ def bug(reason: str, script: str, timeout: float = 30) -> pytest.param:
 
 
 @pytest.mark.parametrize('script, timeout', [
-    bug('V2', 'v2_group_starvation'),
-    bug('V3', 'v3_shutdown_with_queued_members', timeout=10),
-    bug('V4', 'v4_exit_mid_group', timeout=10),
-    bug('V33', 'v33_set_mutated_during_poll'),
     bug('V35', 'v35_dropped_managers'),
-    bug('V38', 'v38_retry_all_race'),
-    bug('V50', 'v50_two_groups'),
-    bug('V50', 'v50_late_add'),
-    bug('V50', 'v50_nested_group_removed'),
     bug('audit section 6', 'shutdown_under_core_app'),
 ])
 def test_script_passes(script: str, timeout: float):
@@ -39,6 +31,13 @@ def test_script_passes(script: str, timeout: float):
     'v49_member_waits_for_group',
     'v49_group_waits_for_member',
     'v49_parent_never_added',
+    'v2_group_starvation',
+    'v3_shutdown_with_queued_members',
+    'v4_exit_mid_group',
+    'v38_retry_all_race',
+    'v50_two_groups',
+    'v50_late_add',
+    'v50_nested_group_removed',
 ])
 def test_fixed_script_passes(script: str):
     assert_script_passes(SCRIPTS / f'{script}.py')

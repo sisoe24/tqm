@@ -111,7 +111,6 @@ def test_deleted_state_cannot_go_back_to_running():
     assert state.is_deleted
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V53')
 def test_start_workers_stops_at_max_workers(executor: TaskExecutor, step_pool: StepPool):
     executor.set_max_workers(2)
     for task in [TaskBuilder().build() for _ in range(8)]:
@@ -124,7 +123,6 @@ def test_start_workers_stops_at_max_workers(executor: TaskExecutor, step_pool: S
     assert started == 2
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V53')
 def test_constructor_enforces_minimum_workers(step_pool: StepPool):
     assert TaskExecutor(1, threadpool=step_pool).max_workers == 2
 

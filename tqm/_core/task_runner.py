@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from PySide2.QtCore import Slot, Signal, QObject, QRunnable
 
 from .logger import LOGGER
-from ..exceptions import TaskEventError
 
 if TYPE_CHECKING:
     from .task import TaskGroup, TaskExecutable
@@ -24,9 +22,6 @@ class RunnerSignals(QObject):
     # progress is used by the user if needed
     task_progress_updated = Signal(int)
 
-    # when group needs to add its tasks
-    group_task_added = Signal(object)
-
 
 class BaseRunner(QRunnable):
 
@@ -42,31 +37,14 @@ class BaseRunner(QRunnable):
 
 
 class GroupRunner(BaseRunner):
-    """
-    Represents a task that can be executed in a separate thread.
-    """
+    """Holds a group's signals. Groups never run on the pool: the executor settles them."""
 
     def __init__(self, group: TaskGroup) -> None:
         super().__init__()
         self.group = group
 
-    @Slot()
     def run(self) -> None:
-        LOGGER.debug('%s: Started', self.group.name)
-        # add all tasks from the main thread
-        self.signals.group_task_added.emit(self.group.tasks)
-
-        # Block until all tasks are complete
-        while not all(task.state.is_completed or task.state.is_failed for task in self.group.tasks):
-            time.sleep(0.1)  # sleep to avoid CPU thrashing
-
-        if all(task.state.is_completed for task in self.group.tasks):
-            LOGGER.debug('%s: Completed', self.group.name)
-            self.signals.runner_completed.emit(self.group)
-
-        elif any(task.state.is_failed for task in self.group.tasks):
-            LOGGER.debug('%s: Failed. Some tasks failed.', self.group.name)
-            self.signals.runner_failed.emit(self.group, TaskEventError('Some tasks failed'))
+        raise RuntimeError('Groups do not run on the thread pool')
 
 
 class TaskRunner(BaseRunner):
