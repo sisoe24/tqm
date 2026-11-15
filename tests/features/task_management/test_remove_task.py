@@ -261,7 +261,6 @@ def test_remove_all_tasks(qtbot: QtBot, app: TQManager):
     assert all(task.state.is_deleted for task in tasks)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V48')
 def test_remove_and_add_same_task(qtbot: QtBot, app: TQManager):
     """Test that a removed task can be added again and runs once."""
     executed = SafeList[str]()

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from typing import Any, List, Optional
-from functools import partial
 
 from PySide2.QtCore import Qt, Slot, Signal, QObject
-from PySide2.QtWidgets import QWidget, QInputDialog
+from PySide2.QtWidgets import QInputDialog
 
 from .._core.task import TaskUnit, TaskGroup, TaskExecutable
 from .ui_view_model import TaskManagerView
@@ -32,7 +31,7 @@ class _TaskButtonsController(QObject):
         view: TaskManagerView,
         executor: TaskExecutor,
         controller: TaskManagerController,
-        parent: Optional[QWidget] = None
+        parent: Optional[QObject] = None
     ) -> None:
         super().__init__(parent)
 
@@ -156,8 +155,9 @@ class TaskManagerController(QObject):
         executor.callbacks.runner_completed.connect(self._on_task_completed)
         executor.callbacks.runner_started.connect(self._on_task_started)
         executor.callbacks.task_removed.connect(self.remove_task)
+        executor.callbacks.task_progress_updated.connect(self._on_task_update_progress)
 
-        self.ops = _TaskButtonsController(self.view, executor, self)
+        self.ops = _TaskButtonsController(self.view, executor, self, self)
 
         self.view.tree_view.selected_task_removed.connect(self._on_remove_selected_tasks)
         self.view.tree_view.selected_task_retried.connect(self._on_retry_selected)
@@ -178,7 +178,7 @@ class TaskManagerController(QObject):
         column = self.view.tree_view.get_column_index(column_name)
         item(task.item.row(), column).setData(value, role)
 
-    @Slot(object, float)
+    @Slot(object, int)
     def _on_task_update_progress(self, task: TaskUnit, value: float) -> None:
         """Update the progress bar of a task."""
         self._update_item_data(task, 'Progress', round(value, 2))
@@ -212,9 +212,6 @@ class TaskManagerController(QObject):
 
     def add_task(self, task: TaskUnit) -> None:
         task.item = self.view.tree_view.tasks_model.add_task(task)
-        task.runner.signals.task_progress_updated.connect(
-            partial(self._on_task_update_progress, task)
-        )
         self.view.toggle_expand(True)
 
     def remove_task(self, task: TaskUnit) -> None:

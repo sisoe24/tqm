@@ -139,9 +139,9 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
         super().__init__(self, self, parent)
         self.setObjectName('TqmTasksTreeView')
 
-        self.tasks_model = TreeModel()
+        self.tasks_model = TreeModel(self)
 
-        self.proxy_model = RecursiveFilterProxyModel()
+        self.proxy_model = RecursiveFilterProxyModel(self)
         self.proxy_model.setFilterKeyColumn(-1)
         self.proxy_model.setSortCaseSensitivity(Qt.CaseInsensitive)
         self.proxy_model.setFilterCaseSensitivity(Qt.CaseInsensitive)

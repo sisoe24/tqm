@@ -16,7 +16,6 @@ def bug(reason: str, script: str, timeout: float = 30) -> pytest.param:
 
 
 @pytest.mark.parametrize('script, timeout', [
-    bug('V35', 'v35_dropped_managers'),
     bug('audit section 6', 'shutdown_under_core_app'),
 ])
 def test_script_passes(script: str, timeout: float):
@@ -37,6 +36,7 @@ def test_script_passes(script: str, timeout: float):
     'v50_two_groups',
     'v50_late_add',
     'v50_nested_group_removed',
+    'v35_dropped_managers',
 ])
 def test_fixed_script_passes(script: str):
     assert_script_passes(SCRIPTS / f'{script}.py')

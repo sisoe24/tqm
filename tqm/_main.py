@@ -56,7 +56,7 @@ class TQManager(QMainWindow):
         LOGGER.addHandler(log_file_handler(config_path))
 
         # core logic
-        self.executor = TaskExecutor(settings.max_workers)
+        self.executor = TaskExecutor(settings.max_workers, parent=self)
 
         # widgets logic
         self._view = TaskManagerView(self.executor, parent)
@@ -64,7 +64,7 @@ class TQManager(QMainWindow):
 
         self.executor.callbacks.status_updated.connect(self._view.update_status)
 
-        self._controller = TaskManagerController(self._view, self.executor, settings)
+        self._controller = TaskManagerController(self._view, self.executor, settings, self)
         self._controller.ops.max_workers_updated.connect(self.executor.set_max_workers)
 
         splitter = QSplitter(Qt.Vertical)

@@ -10,7 +10,7 @@ from PySide2.QtGui import QColor
 
 from .logger import LOGGER, USER_LEVEL
 from .task_state import TaskState
-from .task_runner import BaseRunner
+from .task_runner import RunnerSignals
 from .retry_policy import RetryPolicy, NoRetryPolicy
 from .task_actions import TaskAction
 from .task_options import ProgressBarOptions
@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from .task import TaskUnit
 
 T = TypeVar('T')
-W = TypeVar('W', bound=BaseRunner)
 
 _INDEX_CACHE: Dict[str, Iterator[int]] = {}
 
@@ -34,7 +33,7 @@ def index_gen(suffix: str) -> int:
 
 
 @dataclass
-class TaskBase(Generic[T, W]):
+class TaskBase(Generic[T]):
     """Base class for both Task and TaskGroup entities."""
 
     # attributes
@@ -54,7 +53,8 @@ class TaskBase(Generic[T, W]):
     predicate: TaskPredicate = field(default_factory=TaskPredicate, repr=False)
     callbacks: TaskCallbacks[T] = field(default_factory=TaskCallbacks['T'], repr=False)
 
-    runner: W = field(init=False)
+    # The executor's signals, set when the task is added.
+    signals: RunnerSignals = field(init=False, repr=False, compare=False)
 
     # UI
     color: QColor = QColor(220, 220, 220, 255)
@@ -87,7 +87,7 @@ class TaskBase(Generic[T, W]):
             raise NotImplementedError(f'Cannot compare a task object to {type(value)}')
         return self.id == value.id
 
-    def __lt__(self, other: TaskBase[T, W]) -> bool:
+    def __lt__(self, other: TaskBase[T]) -> bool:
         """Comparison method for the heap queue."""
         return self.index < other.index
 
@@ -139,7 +139,6 @@ class TaskBase(Generic[T, W]):
             'data': self.data,
             'comment': self.comment,
             'callbacks': self.callbacks.inspect(),
-            'runner': str(self.runner),
             'state': self.state.inspect(),
             'actions': [action.inspect() for action in self.actions],
             'progress_bar_options': self.progress_bar.inspect(),

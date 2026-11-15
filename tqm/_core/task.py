@@ -7,24 +7,18 @@ from ..utils import extract_fn_name
 from ..exceptions import TaskGroupError
 from .logger import LOGGER
 from .task_base import TaskBase
-from .task_runner import TaskRunner, GroupRunner
 
-TaskUnit = Union[
-    TaskBase['TaskExecutable', TaskRunner],
-    TaskBase['TaskGroup', GroupRunner]
-]
+TaskUnit = Union[TaskBase['TaskExecutable'], TaskBase['TaskGroup']]
 
 
 @dataclass
-class TaskExecutable(TaskBase['TaskExecutable', TaskRunner]):
+class TaskExecutable(TaskBase['TaskExecutable']):
     execute: Callable[..., Any] = lambda: None
     group: Optional[TaskGroup] = None
-    runner: TaskRunner = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__(suffix='Task')
         LOGGER.debug('TaskExecutable created: %s', str(self))
-        self.runner = TaskRunner(self)
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -35,7 +29,7 @@ class TaskExecutable(TaskBase['TaskExecutable', TaskRunner]):
         return super().delete(comment)
 
     def emit_progress(self, value: float) -> None:
-        self.runner.signals.task_progress_updated.emit(value)
+        self.signals.task_progress_updated.emit(self, value)
 
     def inspect(self) -> Dict[str, Any]:
         data = super().inspect()
@@ -45,14 +39,12 @@ class TaskExecutable(TaskBase['TaskExecutable', TaskRunner]):
 
 
 @dataclass
-class TaskGroup(TaskBase['TaskGroup', GroupRunner]):
+class TaskGroup(TaskBase['TaskGroup']):
     tasks: Set[TaskExecutable] = field(init=False, default_factory=set[TaskExecutable])
-    runner: GroupRunner = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__(suffix='Group')
         LOGGER.debug('Task Group Created: %s', str(self))
-        self.runner = GroupRunner(self)
 
     def __hash__(self) -> int:
         return hash(self.id)

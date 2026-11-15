@@ -14,7 +14,7 @@ from .shutdown import ShutdownThread
 from .task_retry import RetryHandler
 from ..exceptions import (TaskError, TaskEventError, TaskParentError, TaskAlreadyInQueue,
                           TaskPredicateError)
-from .task_runner import RunnerSignals
+from .task_runner import TaskRunner, RunnerSignals
 from .task_predicate import PredicateEventType
 from .threadpool_interface import ThreadPoolWrapper, ThreadPoolInterface
 
@@ -179,7 +179,7 @@ class _ExecutorStateTracker(QObject):
         if self.is_idle():
 
             if not self._idle_timer or not self._idle_timer.isActive():
-                self._idle_timer = QTimer()
+                self._idle_timer = QTimer(self)
                 self._idle_timer.setSingleShot(True)
                 self._idle_timer.timeout.connect(self._emit_idle)
                 self._idle_timer.start(self._idle_timeout)
@@ -200,8 +200,8 @@ class TaskExecutor(QObject):
         LOGGER.info('Initializing TasksManager')
 
         self.queue = TasksQueue()
-        self.callbacks = _ExecutorCallbacks()
-        self.status_tracker = _ExecutorStateTracker(self)
+        self.callbacks = _ExecutorCallbacks(self)
+        self.status_tracker = _ExecutorStateTracker(self, self)
 
         self.max_workers = max_workers
 
@@ -209,7 +209,13 @@ class TaskExecutor(QObject):
         self._threadpool.setMaxThreadCount(self.max_workers)
         self._shutdown_thread = ShutdownThread(self._threadpool)
 
-        self.retry_handler = RetryHandler(self._on_retry_due)
+        self.retry_handler = RetryHandler(self._on_retry_due, self)
+
+        # One for all tasks: a QObject owned by a task could be freed by a GC pass on a worker.
+        self._runner_signals = RunnerSignals(self)
+        self._runner_signals.runner_failed.connect(self._on_task_failed, Qt.QueuedConnection)
+        self._runner_signals.runner_completed.connect(self._on_task_completed, Qt.QueuedConnection)
+        self._runner_signals.task_progress_updated.connect(self.callbacks.task_progress_updated)
 
         self.registry: Set[TaskUnit] = set()
         # Tasks requeued by their retry policy: their next start is not a new run.
@@ -436,9 +442,7 @@ class TaskExecutor(QObject):
 
         self.registry.add(task)
 
-        signals = task.runner.signals
-        signals.runner_failed.connect(self._on_task_failed, Qt.QueuedConnection)
-        signals.runner_completed.connect(self._on_task_completed, Qt.QueuedConnection)
+        task.signals = self._runner_signals
 
         self._initialize_task(task)
 
@@ -504,7 +508,7 @@ class TaskExecutor(QObject):
         if isinstance(task, TaskGroup):
             self._start_group(task)
         else:
-            self._threadpool.start(task.runner)
+            self._threadpool.start(TaskRunner(task))
 
     def _start_task(self, task: TaskUnit) -> None:
         """Start this task now if a worker is free; otherwise it waits in the queue."""

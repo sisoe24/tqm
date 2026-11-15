@@ -157,7 +157,6 @@ def test_progress_survives_a_retry(qtbot: QtBot, app: TQManager, gate: Callable[
     assert cell_data(app.findChild(TaskTreeView), 'T', 'Progress') == 90
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V25')
 def test_group_member_progress_reaches_its_cell(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     release = gate()
 
@@ -174,7 +173,6 @@ def test_group_member_progress_reaches_its_cell(qtbot: QtBot, app: TQManager, ga
     assert cell_data(app.findChild(TaskTreeView), 'M', 'Progress') == 42
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V35')
 def test_removed_task_is_released(qtbot: QtBot, app: TQManager):
     import gc
     import weakref

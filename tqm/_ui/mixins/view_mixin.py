@@ -43,7 +43,7 @@ class ViewStateMixing:
         self.__initial_state = self.__header.saveState()
         self.__columns: Dict[str, int] = {}
 
-        self.__timer = QTimer()
+        self.__timer = QTimer(view)
         self.__timer.setInterval(2000)
         self.__timer.timeout.connect(self._save_table_state)
         self.__timer.setSingleShot(True)

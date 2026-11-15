@@ -3,7 +3,7 @@ from __future__ import annotations
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskExecutable, TaskGroupBuilder
-from tqm._core.task_runner import TaskRunner
+from tqm._core.task_runner import TaskRunner, RunnerSignals
 
 from ..utils import (SafeList, raise_error, assert_task_failed,
                      assert_task_completed)
@@ -15,10 +15,11 @@ class TestTaskRunner:
         signals_received = SafeList[str]()
 
         task = TaskBuilder('SignalTest').with_event(lambda t: None).build()
+        task.signals = RunnerSignals()
         runner = TaskRunner(task)
 
         # Connect to signals
-        runner.signals.runner_completed.connect(lambda _: signals_received.append('completed'))
+        task.signals.runner_completed.connect(lambda _: signals_received.append('completed'))
 
         runner.run()
 
@@ -33,10 +34,11 @@ class TestTaskRunner:
             raise ValueError('Task failed intentionally')
 
         task = TaskBuilder('FailingTest').with_event(failing_task).build()
+        task.signals = RunnerSignals()
         runner = TaskRunner(task)
 
         # Connect to signals
-        runner.signals.runner_failed.connect(
+        task.signals.runner_failed.connect(
             lambda t, e: (signals_received.append('failed'), exceptions_caught.append(str(e)))
         )
 
