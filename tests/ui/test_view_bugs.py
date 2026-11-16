@@ -217,7 +217,6 @@ def test_progress_text_scales_with_min_max():
     assert options.text == '50%'
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V65')
 def test_log_menu_restores_saved_settings(make_manager: Callable[[str], TQManager]):
     folder = Path(os.environ['XDG_CONFIG_HOME']) / 'tqm' / 'a'
     folder.mkdir(parents=True)
@@ -240,7 +239,6 @@ def log_text(qtbot: QtBot, app: TQManager, message: str) -> str:
     return log.toPlainText().replace('\xa0', ' ')
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V67')
 @pytest.mark.parametrize('message', [
     'a < b and b > c',
     '<b>bold</b>',
@@ -251,7 +249,6 @@ def test_log_view_shows_plain_text(qtbot: QtBot, app: TQManager, message: str):
     assert message in log_text(qtbot, app, message)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V67')
 def test_log_view_limits_its_blocks(app: TQManager):
     assert app.findChild(QPlainTextEdit, 'TqmTasksLogs').maximumBlockCount() > 0
 

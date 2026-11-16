@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import logging
 from typing import Dict, Optional
 from pathlib import Path
@@ -10,7 +11,7 @@ from PySide2.QtWidgets import (QAction, QWidget, QFileDialog, QVBoxLayout,
 
 from ..utils import RandomColor
 from .font_loader import get_monospace_font
-from .._core.logger import LOGGER
+from .._core.logger import WidgetLogHandler
 from .._core.settings import open_settings
 
 LOG_COLORS = {
@@ -28,6 +29,7 @@ class TasksLog(QWidget):
         self,
         settings_path: Path,
         should_wrap: bool = False,
+        debug: bool = False,
         parent: Optional[QWidget] = None
     ) -> None:
         super().__init__(parent)
@@ -36,6 +38,7 @@ class TasksLog(QWidget):
 
         self._logs = QPlainTextEdit()
         self._logs.setReadOnly(True)
+        self._logs.setMaximumBlockCount(10000)
         self._logs.setObjectName('TqmTasksLogs')
         self._logs.setFont(get_monospace_font(14))
         self._logs.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -43,12 +46,16 @@ class TasksLog(QWidget):
 
         self._set_line_wrapping(should_wrap)
 
+        self.handler = WidgetLogHandler(self, debug)
+
         self._enable_debug = QAction('Enable Debug', self)
         self._enable_debug.setCheckable(True)
+        self._enable_debug.setChecked(debug)
         self._enable_debug.toggled.connect(self._on_enable_debug)
 
         self._wrap_lines = QAction('Wrap Lines', self)
         self._wrap_lines.setCheckable(True)
+        self._wrap_lines.setChecked(should_wrap)
         self._wrap_lines.toggled.connect(self._on_wrap_lines)
 
         self._clear_console = QAction('Clear', self)
@@ -91,7 +98,7 @@ class TasksLog(QWidget):
 
     @Slot(int)
     def _on_enable_debug(self, state: bool) -> None:
-        LOGGER.widget.setLevel(logging.DEBUG if state else logging.INFO)
+        self.handler.setLevel(logging.DEBUG if state else logging.INFO)
         with open_settings(mode='w', json_file_path=self._settings_path) as s:
             s.enable_debug = state
 
@@ -117,9 +124,8 @@ class TasksLog(QWidget):
     def log(self, text: str, level_name: str = 'INFO', thread: str = '') -> None:
         # TODO: Add a no color flag?
 
-        # we need to replace the regular space with html space if we want to keep
-        # the formatting
-        text = text.replace(' ', '&nbsp;')
+        # Escape first: the text is plain, but the view adds color with html.
+        text = html.escape(text).replace(' ', '&nbsp;').replace('\n', '<br>')
 
         if thread not in self._thread_colors:
             self._thread_colors[thread] = self._random_color.generate().name()

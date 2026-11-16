@@ -13,7 +13,6 @@ from pytestqt.qtbot import QtBot
 from PySide2.QtWidgets import QWidget, QApplication
 
 from tqm import TQManager
-from tqm._core.logger import LOGGER
 from tqm._core.task_executor import TaskExecutor
 
 from .utils.harness import StepPool
@@ -61,22 +60,11 @@ def _delete_now(widget: QWidget) -> None:
 
 @pytest.fixture(autouse=True)
 def isolate_global_state(tmp_path: Path) -> Generator[None, Any, None]:
-    """Keep each test away from the real config dir and from the state of other tests.
-
-    Delete the LOGGER part at R10, or it will mask regressions.
-    """
-    handlers = list(LOGGER.handlers)
-    widget_handler = LOGGER.widget
-
+    """Keep each test away from the real config dir and from the state of other tests."""
     with mock.patch.dict(os.environ, {'XDG_CONFIG_HOME': tmp_path.as_posix()}):
         yield
 
     _release_gates()
-    LOGGER.widget = widget_handler
-    for handler in set(LOGGER.handlers) - set(handlers):
-        LOGGER.removeHandler(handler)
-        handler.close()
-    LOGGER.handlers[:] = handlers
 
 
 @pytest.fixture

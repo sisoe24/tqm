@@ -4,6 +4,7 @@ import os
 import sys
 import logging
 from typing import TYPE_CHECKING, TextIO, Optional
+from collections import Counter
 from pathlib import Path
 from logging.handlers import TimedRotatingFileHandler
 
@@ -34,16 +35,6 @@ class TqmLogger(logging.Logger):
     def __init__(self, name: str = 'tqm') -> None:
         super().__init__(name)
         self.setLevel(logging.DEBUG)
-        self._widget = logging.NullHandler()
-
-    @property
-    def widget(self) -> logging.Handler:
-        return self._widget
-
-    @widget.setter
-    def widget(self, handler: logging.Handler) -> None:
-        self._widget = handler
-        self.addHandler(self._widget)
 
 
 class HandlerSignal(QObject):
@@ -59,12 +50,13 @@ class WidgetLogHandler(logging.Handler):
         self.setFormatter(LOG_WIDGET_FORMAT)
 
         self._widget = widget
-        self._signal = HandlerSignal()
+        # Parented, so the GC cannot free it on the worker thread that logs last.
+        self._signal = HandlerSignal(widget)
         self._signal.log_message.connect(self._widget.log, Qt.QueuedConnection)
 
     def emit(self, record: logging.LogRecord) -> None:
         self._signal.log_message.emit(
-            self.format(record) + '\n',
+            self.format(record),
             record.levelname.upper(),
             str(record.thread)
         )
@@ -85,6 +77,29 @@ def log_file_handler(config_path: Path) -> TimedRotatingFileHandler:
     handler.setFormatter(LOG_FILE_FORMAT)
 
     return handler
+
+
+def add_file_handler(config_path: Path) -> logging.Handler:
+    """Add the file handler for `config_path`. Managers with the same app name share it."""
+    filename = os.path.abspath(config_path / 'logs' / 'tqm.log')
+    handler = next(
+        (h for h in LOGGER.handlers if getattr(h, 'baseFilename', None) == filename), None
+    )
+    if handler is None:
+        handler = log_file_handler(config_path)
+        LOGGER.addHandler(handler)
+    _handler_users[handler] += 1
+    return handler
+
+
+def remove_handlers(*handlers: logging.Handler) -> None:
+    """Remove and close the handlers that no manager uses any more."""
+    for handler in handlers:
+        _handler_users[handler] -= 1
+        if _handler_users[handler] <= 0:
+            del _handler_users[handler]
+            LOGGER.removeHandler(handler)
+            handler.close()
 
 
 def _console_handler() -> logging.StreamHandler[TextIO]:
@@ -119,5 +134,6 @@ def write_log(msg: str, *, stream: Optional[TextIO] = None) -> None:
 
 
 LOGGER = TqmLogger()
+_handler_users: Counter[logging.Handler] = Counter()
 if os.getenv('TQM_DEBUG') == '1':
     LOGGER.addHandler(_console_handler())

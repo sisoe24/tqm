@@ -96,7 +96,9 @@ class TaskBase(Generic[T]):
 
     def log(self, text: str) -> None:
         """Log a message with the task name as prefix."""
-        LOGGER.log(USER_LEVEL, f'{self.name}: {text}')
+        # The tag lets each window show only the logs of its own tasks.
+        tag = getattr(self, 'signals', None)
+        LOGGER.log(USER_LEVEL, f'{self.name}: {text}', extra={'tqm_signals': tag})
 
     def get_children(self) -> Set[TaskUnit]:
         """Return all the children of the task recursively."""

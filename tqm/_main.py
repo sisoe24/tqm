@@ -8,7 +8,7 @@ from PySide2.QtCore import Qt
 from PySide2.QtWidgets import QWidget, QSplitter, QMainWindow, QMessageBox
 
 from ._core.task import TaskUnit, TaskGroup, TaskExecutable
-from ._core.logger import LOGGER, WidgetLogHandler, log_file_handler
+from ._core.logger import LOGGER, remove_handlers, add_file_handler
 from ._ui.tab_logs import TasksLog
 from ._core.settings import get_qss_path, open_settings, get_config_path
 from ._ui.ui_controller import TaskManagerController, _TaskButtonsController
@@ -55,13 +55,16 @@ class TQManager(QMainWindow):
             settings = s
 
         # logs
-        self._logs = TasksLog(settings_path)
-        LOGGER.widget = WidgetLogHandler(self._logs, settings.enable_debug)
+        self._logs = TasksLog(settings_path, settings.wrap_lines, settings.enable_debug)
+        handlers = (self._logs.handler, add_file_handler(config_path))
+        LOGGER.addHandler(self._logs.handler)
+        self.destroyed.connect(lambda: remove_handlers(*handlers))
         LOGGER.info('Initializing TQManager')
-        LOGGER.addHandler(log_file_handler(config_path))
 
         # core logic
         self.executor = TaskExecutor(settings.max_workers, parent=self)
+        signals = self.executor._runner_signals
+        self._logs.handler.addFilter(lambda r: getattr(r, 'tqm_signals', None) in (None, signals))
 
         # widgets logic
         self._view = TaskManagerView(self.executor, settings_path, parent)
