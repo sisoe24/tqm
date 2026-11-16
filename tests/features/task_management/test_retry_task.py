@@ -4,7 +4,6 @@ from unittest import mock
 from itertools import count
 from threading import Event, Thread, current_thread
 
-import pytest
 from PySide2.QtCore import QTimer
 from pytestqt.qtbot import QtBot
 

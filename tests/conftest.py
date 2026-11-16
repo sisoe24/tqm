@@ -102,9 +102,13 @@ def step_pool(qapp: Any) -> StepPool:
 
 
 @pytest.fixture
-def executor(step_pool: StepPool) -> TaskExecutor:
+def executor(step_pool: StepPool) -> Generator[TaskExecutor, Any, None]:
     """Create a headless executor where the test decides when each task runs."""
-    return TaskExecutor(threadpool=step_pool)
+    executor = TaskExecutor(threadpool=step_pool)
+    yield executor
+    # It sits in a reference cycle. Left to the GC, it can be freed on a worker thread.
+    executor.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 @pytest.fixture
@@ -129,7 +133,7 @@ def app(
 
 
 @pytest.fixture
-def make_manager() -> Generator[Callable[[str], TQManager], Any, None]:
+def make_manager(qapp: Any) -> Generator[Callable[[str], TQManager], Any, None]:
     """Create extra managers, for tests that need their own settings or several windows."""
     widgets: List[TQManager] = []
 

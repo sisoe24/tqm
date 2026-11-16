@@ -5,7 +5,6 @@ import json
 from typing import Any, Set, List
 from pathlib import Path
 
-import pytest
 from PySide2.QtCore import Qt, QModelIndex, QItemSelectionModel
 from pytestqt.qtbot import QtBot
 from PySide2.QtWidgets import QLineEdit
