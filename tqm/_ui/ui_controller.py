@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from typing import Any, List, Optional
+from pathlib import Path
 
 from PySide2.QtCore import Qt, Slot, Signal, QObject
 from PySide2.QtWidgets import QInputDialog
 
 from .._core.task import TaskUnit, TaskGroup, TaskExecutable
 from .ui_view_model import TaskManagerView
-from .._core.settings import Settings, open_settings
+from .._core.settings import open_settings
 from .._core.task_executor import TaskExecutor
 
 
@@ -31,6 +32,7 @@ class _TaskButtonsController(QObject):
         view: TaskManagerView,
         executor: TaskExecutor,
         controller: TaskManagerController,
+        settings_path: Path,
         parent: Optional[QObject] = None
     ) -> None:
         super().__init__(parent)
@@ -38,6 +40,7 @@ class _TaskButtonsController(QObject):
         self._view = view
         self._executor = executor
         self._controller = controller
+        self._settings_path = settings_path
 
         view.toolbar.retry_all_btn.clicked.connect(self.retry_all_failed)
 
@@ -54,30 +57,26 @@ class _TaskButtonsController(QObject):
         table_ops.set_max_workers.triggered.connect(self.set_max_workers)
 
     @Slot()
-    def set_max_workers(self, value: int = 20) -> None:
+    def set_max_workers(self, value: int = 0) -> None:
         """
         Sets the maximum number of workers for the application.
 
         If a value is provided, it emits a signal to update the maximum workers
-        and optionally stores the value. If no value is provided, it retrieves
-        the current maximum workers from the settings and prompts the user
-        to input a new value through a dialog.
+        and optionally stores the value. If no value is provided, it prompts the
+        user for a new value, starting from the executor's current maximum.
 
         Args:
-            value (int, optional): The number of workers to set. Defaults to 20.
+            value (int, optional): The number of workers to set. 0 asks the user.
 
         Emits:
             max_workers_updated (int): Signal emitted with the new value.
 
         """
         if not value:
-
-            with open_settings() as s:
-                value = s.max_workers
-
             value, ok = QInputDialog.getInt(
                 self._view, 'Set Max Workers',
-                'Enter the number of workers (min 2)', value=value, minValue=2
+                'Enter the number of workers (min 2)',
+                value=self._executor.max_workers, minValue=2
             )
             if not ok:
                 return
@@ -85,7 +84,7 @@ class _TaskButtonsController(QObject):
         value = max(2, value)
         self.max_workers_updated.emit(value)
 
-        with open_settings('w') as s:
+        with open_settings('w', json_file_path=self._settings_path) as s:
             s.max_workers = value
 
     @Slot()
@@ -139,13 +138,12 @@ class TaskManagerController(QObject):
         self,
         view: TaskManagerView,
         executor: TaskExecutor,
-        settings: Settings,
+        settings_path: Path,
         parent: Optional[QObject] = None
     ) -> None:
         super().__init__(parent)
 
         self.view = view
-        self._settings = settings
         self._executor = executor
 
         view.toolbar.run_all_tasks.clicked.connect(executor.start_workers)
@@ -157,7 +155,7 @@ class TaskManagerController(QObject):
         executor.callbacks.task_removed.connect(self.remove_task)
         executor.callbacks.task_progress_updated.connect(self._on_task_update_progress)
 
-        self.ops = _TaskButtonsController(self.view, executor, self, self)
+        self.ops = _TaskButtonsController(self.view, executor, self, settings_path, self)
 
         self.view.tree_view.selected_task_removed.connect(self._on_remove_selected_tasks)
         self.view.tree_view.selected_task_retried.connect(self._on_retry_selected)

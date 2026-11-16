@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Dict, Optional
+from pathlib import Path
 
 from PySide2.QtCore import Qt, QDir, Slot, QPoint, QDateTime
 from PySide2.QtWidgets import (QAction, QWidget, QFileDialog, QVBoxLayout,
@@ -23,8 +24,15 @@ LOG_COLORS = {
 
 
 class TasksLog(QWidget):
-    def __init__(self, should_wrap: bool = False, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        settings_path: Path,
+        should_wrap: bool = False,
+        parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(parent)
+
+        self._settings_path = settings_path
 
         self._logs = QPlainTextEdit()
         self._logs.setReadOnly(True)
@@ -78,13 +86,13 @@ class TasksLog(QWidget):
     @Slot()
     def _on_wrap_lines(self, state: bool) -> None:
         self._set_line_wrapping(state)
-        with open_settings(mode='w') as s:
+        with open_settings(mode='w', json_file_path=self._settings_path) as s:
             s.wrap_lines = state
 
     @Slot(int)
     def _on_enable_debug(self, state: bool) -> None:
         LOGGER.widget.setLevel(logging.DEBUG if state else logging.INFO)
-        with open_settings(mode='w') as s:
+        with open_settings(mode='w', json_file_path=self._settings_path) as s:
             s.enable_debug = state
 
     @Slot()

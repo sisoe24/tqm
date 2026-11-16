@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import os
 import json
 from typing import Any, Set, List
-from pathlib import Path
 
 from PySide2.QtCore import Qt, QModelIndex, QItemSelectionModel
 from pytestqt.qtbot import QtBot
@@ -11,6 +9,7 @@ from PySide2.QtWidgets import QLineEdit
 
 from tqm import TQManager, TaskBuilder, TaskGroupBuilder
 from tqm._ui.toolbar import TasksViewToolbar
+from tqm._core.settings import get_config_path
 from tqm._ui.ui_view_model import TaskTreeView
 
 from ..utils import (raise_error, assert_task_failed, failure_controller,
@@ -393,7 +392,7 @@ def test_set_max_workers_is_floored_and_saved(app: TQManager):
 
     assert updates == [2]
     assert app.executor.max_workers == 2
-    assert json.loads(Path(os.environ['TQM_SETTINGS_PATH']).read_text())['max_workers'] == 2
+    assert json.loads((get_config_path('tmp_test') / 'settings.json').read_text())['max_workers'] == 2
 
 
 def test_run_all_button_starts_the_tasks(qtbot: QtBot, app: TQManager):

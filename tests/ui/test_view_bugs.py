@@ -19,7 +19,7 @@ from PySide2.QtWidgets import (QMenu, QAction, QLineEdit, QApplication,
 
 from tqm import TQManager, TaskBuilder, TaskGroupBuilder
 from tqm._core.logger import LOGGER
-from tqm._core.settings import Settings
+from tqm._core.settings import get_config_path
 from tqm._ui.toolbar import TableOptions, TasksViewToolbar
 from tqm._ui.debug_widget import TasksList, DebugWidget, StateHistoryWidget
 from tqm._ui.ui_view_model import TaskTreeView
@@ -420,8 +420,7 @@ def test_sort_order_survives_a_restart(qtbot: QtBot, app: TQManager, view: TaskT
     view.sortByColumn(4, Qt.AscendingOrder)
     run_events(qtbot, 2100)
 
-    Settings._instance = None
-    restarted = TaskTreeView()
+    restarted = TaskTreeView(get_config_path('tmp_test') / 'settings.json')
     section = restarted.header().sortIndicatorSection()
     restarted.deleteLater()
     QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
@@ -525,7 +524,6 @@ def test_view_parent_is_callable(view: TaskTreeView):
         view.parent()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V53')
 def test_set_max_workers_with_no_value_asks_the_user(app: TQManager):
     with mock.patch('tqm._ui.ui_controller.QInputDialog.getInt', return_value=(7, True)):
         app.operations.set_max_workers()

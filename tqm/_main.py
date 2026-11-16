@@ -15,6 +15,7 @@ from ._ui.ui_controller import TaskManagerController, _TaskButtonsController
 from ._ui.ui_view_model import TaskManagerView
 from ._core.task_builder import TaskBuilder, TaskGroupBuilder
 from ._core.task_executor import TaskExecutor, _ExecutorCallbacks
+from .widgets.help_widget import show_help
 
 TaskGroupGenerator = Generator[TaskGroup, Any, None]
 
@@ -44,13 +45,17 @@ class TQManager(QMainWindow):
         config_path = get_config_path(app_name)
         config_path.mkdir(exist_ok=True, parents=True)
 
-        self.setStyleSheet(get_qss_path(config_path).read_text())
+        try:
+            self.setStyleSheet(get_qss_path(config_path).read_text())
+        except OSError as e:
+            print('[tqm error]: Cannot read the style sheet.', e)
 
-        with open_settings() as s:
+        settings_path = config_path / 'settings.json'
+        with open_settings(json_file_path=settings_path) as s:
             settings = s
 
         # logs
-        self._logs = TasksLog()
+        self._logs = TasksLog(settings_path)
         LOGGER.widget = WidgetLogHandler(self._logs, settings.enable_debug)
         LOGGER.info('Initializing TQManager')
         LOGGER.addHandler(log_file_handler(config_path))
@@ -59,12 +64,15 @@ class TQManager(QMainWindow):
         self.executor = TaskExecutor(settings.max_workers, parent=self)
 
         # widgets logic
-        self._view = TaskManagerView(self.executor, parent)
+        self._view = TaskManagerView(self.executor, settings_path, parent)
+        self._view.toolbar.table_options.help.triggered.connect(
+            lambda: show_help(config_path=str(config_path))
+        )
         self.executor.callbacks.system_idle.connect(self._view.tree_view.stop_animation)
 
         self.executor.callbacks.status_updated.connect(self._view.update_status)
 
-        self._controller = TaskManagerController(self._view, self.executor, settings, self)
+        self._controller = TaskManagerController(self._view, self.executor, settings_path, self)
         self._controller.ops.max_workers_updated.connect(self.executor.set_max_workers)
 
         splitter = QSplitter(Qt.Vertical)

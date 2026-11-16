@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import json
-from typing import Any, Dict, Literal, Optional, Generator
+from typing import Any, Dict, Literal, Generator
 from pathlib import Path
 from contextlib import contextmanager
 from dataclasses import field, asdict, dataclass
@@ -36,9 +36,6 @@ def get_config_path(app_name: str) -> Path:
             else home / '.config' / 'tqm' / app_name
         )
 
-    os.environ['TQM_CONFIG_PATH'] = str(path)
-    os.environ['TQM_SETTINGS_PATH'] = str(path / 'settings.json')
-
     return path
 
 
@@ -61,18 +58,8 @@ def get_qss_path(config_path: Path) -> Path:
     return user_qss
 
 
-class _SingletonMeta(type):
-    _instance = None
-
-    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
-        if not cls._instance:
-            instance = super().__call__(*args, **kwargs)
-            cls._instance = instance
-        return cls._instance
-
-
 @dataclass
-class Settings(metaclass=_SingletonMeta):
+class Settings:
     max_workers: int = 20
     enable_debug: bool = False
     wrap_lines: bool = True
@@ -82,31 +69,34 @@ class Settings(metaclass=_SingletonMeta):
 @contextmanager
 def open_settings(
     mode: Literal['r', 'w'] = 'r',
-    *, json_file_path: Optional[Path] = None
+    *, json_file_path: Path
 ) -> Generator[Settings, Any, None]:
     """Open settings context manager.
 
     ```
-    with open_settings(mode='r') as s:
+    with open_settings(mode='r', json_file_path=path) as s:
         s.save_to_db = True
         s.focus_tab_on_error = False
     ```
     """
-    if json_file_path is None:
-        json_file_path = Path(os.environ['TQM_SETTINGS_PATH'])
-
+    settings = Settings()
     try:
         with json_file_path.open() as f:
-            settings = Settings(**json.load(f))
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError(f'expected an object, got {data!r}')
+
+        # Keep each known key with the default's type, so one bad key does not reset the rest.
+        for name, value in data.items():
+            if name in asdict(settings) and type(value) is type(getattr(settings, name)):
+                setattr(settings, name, value)
 
     except FileNotFoundError:
-        settings = Settings()
         with json_file_path.open('w') as f:
             json.dump(asdict(settings), f, indent=4)
 
     except Exception as e:
         print('[tqm error]: Invalid settings file. Resetting settings.', e)
-        settings = Settings()
 
     yield settings
 

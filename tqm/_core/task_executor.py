@@ -146,7 +146,10 @@ class _ExecutorStateTracker(QObject):
         self._active_groups = 0
 
         self._idle_timer: Optional[QTimer] = None
-        self._idle_timeout = int(os.getenv('TQM_IDLE_TIMEOUT', 1000))
+        try:
+            self._idle_timeout = int(os.getenv('TQM_IDLE_TIMEOUT', 1000))
+        except ValueError:
+            self._idle_timeout = 1000
 
     @property
     def running_tasks(self) -> int:

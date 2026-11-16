@@ -10,7 +10,7 @@ import pytest
 
 from tqm import TQManager, TaskBuilder
 from tqm._core.logger import LOGGER
-from tqm._core.settings import Settings, open_settings, get_config_path
+from tqm._core.settings import open_settings, get_config_path
 from tqm._core.task_executor import TaskExecutor
 
 from .utils.harness import StepPool, assert_script_passes
@@ -50,24 +50,16 @@ def test_failure_mid_group_is_reported(tmp_path: Path) -> None:
 @pytest.mark.parametrize('order', ['first', 'second'])
 def test_global_state_does_not_leak(order: str, tmp_path: Path, app: TQManager) -> None:
     assert Path(os.environ['XDG_CONFIG_HOME']) == tmp_path
-    assert Path(os.environ['TQM_SETTINGS_PATH']).is_relative_to(tmp_path)
 
-    with open_settings() as settings:
+    with open_settings(json_file_path=get_config_path('tmp_test') / 'settings.json') as settings:
         assert settings.max_workers == 20
         settings.max_workers = 3
 
     assert len(LOGGER.handlers) == 2
 
 
-def test_env_vars_written_by_the_code_are_gone() -> None:
-    assert 'TQM_CONFIG_PATH' not in os.environ
-    get_config_path('leak_check')
-    assert 'TQM_CONFIG_PATH' in os.environ
-
-
 def test_logger_starts_without_handlers_from_other_tests() -> None:
     assert LOGGER.handlers == []
-    assert Settings._instance is None
 
 
 def test_step_pool_runs_tasks_only_when_asked(

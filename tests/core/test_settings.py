@@ -1,7 +1,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import json
 from pathlib import Path
@@ -66,21 +65,6 @@ def test_unix_fallback(monkeypatch: pytest.MonkeyPatch):
     assert result == Path('/fake/home/.config/tqm/test_app')
 
 
-def test_environment_variables_set(monkeypatch: pytest.MonkeyPatch):
-    """Test that environment variables are properly set."""
-    # Setup
-    app_name = 'env_var_test'
-    monkeypatch.setenv('TQM_CONFIG_PATH', 'stale')
-    monkeypatch.setenv('TQM_SETTINGS_PATH', 'stale')
-
-    # Test
-    result = get_config_path(app_name)
-
-    # Check environment variables
-    assert os.environ['TQM_CONFIG_PATH'] == str(result)
-    assert os.environ['TQM_SETTINGS_PATH'] == str(result / 'settings.json')
-
-
 @pytest.fixture
 def mock_settings(tmp_path: Path):
     f = tmp_path / 'settings.json'
@@ -102,7 +86,6 @@ def test_load_from_json(tmp_path: Path):
         assert s.enable_debug is True
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V28')
 def test_load_from_json_keeps_known_keys_on_unknown_key(tmp_path: Path):
     f = tmp_path / 'settings.json'
     f.write_text('{"max_workers": 3, "xxx": -1}')

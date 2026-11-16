@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from typing import Any, Dict, List, Tuple, Union, Optional
+from pathlib import Path
 from functools import partial
 
 from PySide2.QtGui import (QIcon, QStandardItem, QContextMenuEvent,
@@ -130,8 +131,8 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
     selected_task_retried = Signal(TaskExecutable)
     selected_task_removed = Signal()
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(self, self, parent)
+    def __init__(self, settings_path: Path, parent: Optional[QWidget] = None) -> None:
+        super().__init__(self, self, settings_path, parent)
         self.setObjectName('TqmTasksTreeView')
 
         self.tasks_model = TreeModel(self)
@@ -234,10 +235,15 @@ class TaskManagerView(QWidget):
 
     """
 
-    def __init__(self, executor: TaskExecutor, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        executor: TaskExecutor,
+        settings_path: Path,
+        parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(parent)
 
-        self.tree_view = TaskTreeView()
+        self.tree_view = TaskTreeView(settings_path)
         self.tree_view.clicked.connect(self._on_toggle_debug)
 
         self.toolbar = TasksViewToolbar()

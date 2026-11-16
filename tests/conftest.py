@@ -14,7 +14,6 @@ from PySide2.QtWidgets import QWidget, QApplication
 
 from tqm import TQManager
 from tqm._core.logger import LOGGER
-from tqm._core.settings import Settings
 from tqm._core.task_executor import TaskExecutor
 
 from .utils.harness import StepPool
@@ -64,20 +63,15 @@ def _delete_now(widget: QWidget) -> None:
 def isolate_global_state(tmp_path: Path) -> Generator[None, Any, None]:
     """Keep each test away from the real config dir and from the state of other tests.
 
-    The patch restores env vars that the code writes directly. Delete the Settings
-    part at R9 and the LOGGER part at R10, or they will mask regressions.
+    Delete the LOGGER part at R10, or it will mask regressions.
     """
     handlers = list(LOGGER.handlers)
     widget_handler = LOGGER.widget
-    Settings._instance = None
 
     with mock.patch.dict(os.environ, {'XDG_CONFIG_HOME': tmp_path.as_posix()}):
-        os.environ.pop('TQM_CONFIG_PATH', None)
-        os.environ.pop('TQM_SETTINGS_PATH', None)
         yield
 
     _release_gates()
-    Settings._instance = None
     LOGGER.widget = widget_handler
     for handler in set(LOGGER.handlers) - set(handlers):
         LOGGER.removeHandler(handler)

@@ -144,8 +144,6 @@ tqm stores its settings in:
 
 ## Environment
 
-- `TQM_CONFIG_PATH` - Configuration directory path
-- `TQM_SETTINGS_PATH` - Settings file path
 - `TQM_QSS_PATH` -Qt stylesheet path
 - `TQM_MONO_FONT` - Monospace font family
 - `TQM_DEBUG` - Enables debug logging when set to '1'

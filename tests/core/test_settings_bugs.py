@@ -22,7 +22,6 @@ def write_settings(app_name: str, settings: Dict[str, object]) -> Path:
     return path
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V26')
 def test_each_manager_reads_its_own_settings(make_manager: Callable[[str], TQManager]):
     write_settings('a', {'max_workers': 3})
     write_settings('b', {'max_workers': 9})
@@ -33,7 +32,6 @@ def test_each_manager_reads_its_own_settings(make_manager: Callable[[str], TQMan
     assert second.executor.max_workers == 9
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V26')
 def test_each_manager_writes_its_own_settings(make_manager: Callable[[str], TQManager]):
     path_a = write_settings('a', {'max_workers': 3})
     path_b = write_settings('b', {'max_workers': 9})
@@ -45,7 +43,6 @@ def test_each_manager_writes_its_own_settings(make_manager: Callable[[str], TQMa
     assert json.loads(path_b.read_text())['max_workers'] == 9
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V28')
 def test_null_view_setting_does_not_break_the_constructor(make_manager: Callable[[str], TQManager]):
     write_settings('a', {'view': None})
 
@@ -53,7 +50,6 @@ def test_null_view_setting_does_not_break_the_constructor(make_manager: Callable
         make_manager('a')
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V57')
 @pytest.mark.parametrize('name', ['TQM_CONFIG_PATH', 'TQM_SETTINGS_PATH'])
 def test_preset_path_variable_is_not_overwritten(name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     preset = str(tmp_path / 'preset')
@@ -75,7 +71,6 @@ def test_mono_font_variable_wins_over_the_bundled_font(monkeypatch: pytest.Monke
     assert family == 'Courier New'
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V59')
 def test_bad_qss_path_does_not_break_the_constructor(make_manager: Callable[[str], TQManager], monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv('TQM_QSS_PATH', '/nonexistent/x.qss')
 
@@ -83,7 +78,6 @@ def test_bad_qss_path_does_not_break_the_constructor(make_manager: Callable[[str
         make_manager('a')
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V59')
 def test_bad_idle_timeout_does_not_break_the_constructor(make_manager: Callable[[str], TQManager], monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv('TQM_IDLE_TIMEOUT', 'abc')
 
