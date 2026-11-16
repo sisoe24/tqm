@@ -298,32 +298,43 @@ class TaskExecutor(QObject):
 
     def _remove_and_cleanup_task(self, task: TaskUnit) -> None:
         task.delete()
+        # Rows go before their group row, or the group row deletes them first.
+        for member in getattr(task, 'tasks', set()).copy():
+            self.remove_task(member)
+        self.callbacks.task_removed.emit(task)
         for child in task.children.copy():
             self.remove_task(child)
-        self.callbacks.task_removed.emit(task)
 
-    def remove_task(self, task: TaskUnit) -> None:
-        """Attempt to remove a task from the queue.
+        group = getattr(task, 'group', None)
+        if group is not None and not group.tasks and group.state.is_removable and not group.state.is_deleted:
+            self.remove_task(group)
 
-        Tasks that depend on the removed task will be also removed since they will
-        never be executed.
-
-        Raises:
-            TaskNotFound: If the task is not found in the queue.
-
-        """
-        if task.state.is_inactive:
-            self._remove_and_cleanup_task(task)
-            return
-
-        if task not in self.registry:
-            return
-
+    def _check_removable(self, task: TaskUnit) -> None:
         if not task.state.is_removable:
             raise TaskError(
                 f'Cannot remove task: {task.name}. '
                 f'State "{task.state.current}" is not removable'
             )
+        for other in (*task.children, *getattr(task, 'tasks', ())):
+            self._check_removable(other)
+
+    def remove_task(self, task: TaskUnit) -> None:
+        """Remove a task, its group members and the tasks that wait for it.
+
+        Running tasks are not removable. Nothing is removed if any of these tasks is running.
+
+        Raises:
+            TaskError: If the task or one of the tasks it takes along is running.
+
+        """
+        if not task.state.is_inactive and task not in self.registry:
+            return
+
+        self._check_removable(task)
+
+        if task.state.is_inactive:
+            self._remove_and_cleanup_task(task)
+            return
 
         self._drop(task)
 
@@ -456,6 +467,9 @@ class TaskExecutor(QObject):
 
         if task in self.registry:
             raise TaskAlreadyInQueue(f'Task "{task}" already in queue')
+
+        if task.state.is_deleted:
+            raise TaskError(f'Task "{task}" was removed and cannot be added again')
 
         if isinstance(task, TaskGroup) and not task.tasks:
             raise TaskGroupError(f'Cannot add TaskGroup "{task.name}" without any tasks')

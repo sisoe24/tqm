@@ -69,8 +69,7 @@ ALLOWED_TRANSITIONS: Dict[TaskStateEnum, FrozenSet[TaskStateEnum]] = {
     _S.RUNNING: frozenset({_S.COMPLETED, _S.FAILED, _S.RETRYING}),
     _S.COMPLETED: frozenset({_S.INACTIVE, _S.DELETED}),
     _S.FAILED: frozenset({_S.INACTIVE, _S.DELETED}),
-    # Re-adding a removed task. R11 makes that raise (V48) and empties this entry.
-    _S.DELETED: frozenset({_S.WAITING}),
+    _S.DELETED: frozenset(),
 }
 
 
@@ -231,5 +230,5 @@ class TaskState:
     def is_removable(self) -> bool:
         return any([
             self.is_waiting, self.is_deleted, self.is_inactive,
-            self.is_completed, self.is_failed
+            self.is_completed, self.is_failed, self.is_blocked, self.is_retrying
         ])

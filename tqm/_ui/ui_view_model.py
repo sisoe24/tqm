@@ -7,7 +7,8 @@ from functools import partial
 
 from PySide2.QtGui import (QIcon, QStandardItem, QContextMenuEvent,
                            QStandardItemModel)
-from PySide2.QtCore import Qt, Slot, Signal, QModelIndex, QSortFilterProxyModel
+from PySide2.QtCore import (Qt, Slot, Signal, QModelIndex, QItemSelectionModel,
+                            QSortFilterProxyModel)
 from PySide2.QtWidgets import (QMenu, QAction, QWidget, QSplitter, QTreeView,
                                QVBoxLayout)
 
@@ -199,6 +200,10 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
         item = self.indexAt(event.pos()).siblingAtColumn(0)
         if not item.isValid() or not item.data(Qt.UserRole):
             return
+
+        # Act on the clicked row: select it unless it is already part of the selection.
+        if not self.selectionModel().isRowSelected(item.row(), item.parent()):
+            self.selectionModel().select(item, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
 
         menu = QMenu(self)
 

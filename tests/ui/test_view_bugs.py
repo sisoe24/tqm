@@ -84,7 +84,6 @@ def open_context_menu(view: TaskTreeView, name: str, action: Optional[str] = Non
     return labels
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V15')
 def test_context_retry_acts_on_the_clicked_row(
     qtbot: QtBot,
     app: TQManager,
@@ -118,7 +117,6 @@ def test_context_retry_acts_on_the_clicked_row(
     assert runs == {'Aaa': 1, 'Bbb': 2}
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V16')
 def test_context_remove_with_no_selection_removes_the_clicked_row(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Aaa', 'Bbb')
 
@@ -127,7 +125,6 @@ def test_context_remove_with_no_selection_removes_the_clicked_row(app: TQManager
     assert top_rows(view) == ['Aaa']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V16')
 def test_context_remove_ignores_another_selected_row(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Aaa', 'Bbb')
 

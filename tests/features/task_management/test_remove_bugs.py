@@ -4,7 +4,6 @@ from typing import Any, List, Callable
 from threading import Event
 from unittest import mock
 
-import pytest
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskExecutor, TaskGroupBuilder
@@ -25,7 +24,6 @@ def top_rows(app: TQManager) -> List[str]:
     return [model.index(i, 0).data() for i in range(model.rowCount())]
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V36')
 def test_removing_the_last_waiting_member_of_a_running_group(
     qtbot: QtBot,
     app: TQManager,
@@ -48,7 +46,6 @@ def test_removing_the_last_waiting_member_of_a_running_group(
     assert not errors
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V41')
 def test_blocked_task_is_removable(executor: TaskExecutor, step_pool: StepPool):
     parent = noop_task('P').build()
     child = noop_task('C').with_wait_for(parent).build()
@@ -63,7 +60,6 @@ def test_blocked_task_is_removable(executor: TaskExecutor, step_pool: StepPool):
     assert child.state.is_deleted
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V41')
 def test_retrying_task_is_removable_and_its_timer_is_cancelled(
     executor: TaskExecutor,
     step_pool: StepPool
@@ -91,7 +87,6 @@ def test_retrying_task_is_removable_and_its_timer_is_cancelled(
     assert len(runs) == 1
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V42')
 def test_clear_all_continues_past_a_running_task(
     qtbot: QtBot,
     app: TQManager,
@@ -110,7 +105,6 @@ def test_clear_all_continues_past_a_running_task(
     assert top_rows(app) == ['Run']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V43')
 def test_clearing_a_completed_group_raises_nothing(qtbot: QtBot, app: TQManager):
     group = TaskGroupBuilder('G').with_tasks(noop_task('A').build(), noop_task('B').build()).build()
     app.add_tasks(group)
@@ -123,7 +117,6 @@ def test_clearing_a_completed_group_raises_nothing(qtbot: QtBot, app: TQManager)
     assert not errors
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V43')
 def test_clearing_a_failed_group_removes_its_completed_member(qtbot: QtBot, app: TQManager):
     completed = noop_task('Ok').build()
     failed = TaskBuilder('Bad').with_event(raise_error).build()
@@ -138,7 +131,6 @@ def test_clearing_a_failed_group_removes_its_completed_member(qtbot: QtBot, app:
     assert completed not in app.executor.get_all_tasks()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V44')
 def test_removing_a_finished_group_removes_its_members(qtbot: QtBot, app: TQManager):
     member = noop_task('A').build()
     group = TaskGroupBuilder('G').with_tasks(member).build()

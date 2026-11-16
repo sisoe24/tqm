@@ -8,7 +8,7 @@ from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskGroupBuilder, exceptions
 
-from ...utils import SafeList, raise_error, assert_task_completed
+from ...utils import SafeList, raise_error
 
 
 def test_remove_single_task(qtbot: QtBot, app: TQManager):
@@ -262,38 +262,14 @@ def test_remove_all_tasks(qtbot: QtBot, app: TQManager):
 
 
 def test_remove_and_add_same_task(qtbot: QtBot, app: TQManager):
-    """Test that a removed task can be added again and runs once."""
-    executed = SafeList[str]()
+    """Test that a removed task cannot be added again."""
+    task = TaskBuilder('ReusableTask').with_event(lambda t: None).build()
 
-    # Create a task
-    task = (
-        TaskBuilder('ReusableTask')
-        .with_event(lambda t: executed.append(t.name))
-        .build()
-    )
-
-    # Add to task manager
     app.add_tasks(task)
-
-    # Verify task is in queue
-    assert task in app.executor.get_all_tasks()
-
-    # Remove the task
     app.executor.remove_task(task)
 
-    # Verify task is removed
+    with pytest.raises(exceptions.TaskError):
+        app.add_tasks(task)
+
     assert task not in app.executor.get_all_tasks()
-
-    # Try to add the same task again - should not raise TaskAlreadyInQueue
-    app.add_tasks(task)
-
-    assert task in app.executor.get_all_tasks()
-
-    app.start_workers()
-    qtbot.wait_until(lambda: task.state.is_completed)
-
-    assert executed.to_list() == ['ReusableTask']
-    assert_task_completed(
-        task,
-        ['inactive', 'waiting', 'deleted', 'waiting', 'running', 'completed']
-    )
+    assert task.state.is_deleted

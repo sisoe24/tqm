@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional
+import contextlib
+from typing import Any, List, Iterable, Optional
 from pathlib import Path
 
 from PySide2.QtCore import Qt, Slot, Signal, QObject
@@ -8,6 +9,7 @@ from PySide2.QtWidgets import QInputDialog
 
 from .._core.task import TaskUnit, TaskGroup, TaskExecutable
 from .ui_view_model import TaskManagerView
+from ..exceptions import TaskError
 from .._core.settings import open_settings
 from .._core.task_executor import TaskExecutor
 
@@ -108,26 +110,19 @@ class _TaskButtonsController(QObject):
 
     @Slot()
     def clear_completed_tasks(self) -> None:
-        for task in self._controller.get_all_tasks():
-            if task.state.is_completed:
-                self._executor.remove_task(task)
+        self._controller.remove_tasks(t for t in self._controller.get_all_tasks() if t.state.is_completed)
 
     @Slot()
     def clear_failed_tasks(self) -> None:
-        for task in self._controller.get_all_tasks():
-            if task.state.is_failed:
-                self._executor.remove_task(task)
+        self._controller.remove_tasks(t for t in self._controller.get_all_tasks() if t.state.is_failed)
 
     @Slot()
     def clear_waiting_tasks(self) -> None:
-        for task in self._controller.get_all_tasks():
-            if task.state.is_waiting:
-                self._executor.remove_task(task)
+        self._controller.remove_tasks(t for t in self._controller.get_all_tasks() if t.state.is_waiting)
 
     @Slot()
     def clear_all_tasks(self) -> None:
-        for task in self._controller.get_all_tasks():
-            self._executor.remove_task(task)
+        self._controller.remove_tasks(self._controller.get_all_tasks())
 
 
 class TaskManagerController(QObject):
@@ -202,11 +197,10 @@ class TaskManagerController(QObject):
     def _on_task_started(self, task: TaskUnit) -> None:
         self._update_item_data(task, 'Started', task.state.get_last().timestamp)
 
-    @Slot()
-    def _on_retry_selected(self) -> None:
-        for task in self.get_selected_tasks():
-            if task.state.is_retryable:
-                self._executor.retry_task(task)
+    @Slot(object)
+    def _on_retry_selected(self, task: TaskUnit) -> None:
+        if task.state.is_retryable:
+            self._executor.retry_task(task)
 
     def add_task(self, task: TaskUnit) -> None:
         task.item = self.view.tree_view.tasks_model.add_task(task)
@@ -223,10 +217,9 @@ class TaskManagerController(QObject):
         Behavior:
             - If the task has no associated item (`task.item` is None), the method
               returns immediately without performing any action.
-            - If the task's item has a parent group (`group_parent`):
-                - The task's item is removed from its parent group.
-                - If the parent group becomes empty after the removal, the parent
-                  group itself is removed from the tasks model.
+            - If the task's item has a parent group (`group_parent`), the task's
+              item is removed from its parent group. The executor removes a group
+              left empty.
             - If the task's item does not have a parent group, it is removed
               directly from the tasks model.
         """
@@ -239,17 +232,18 @@ class TaskManagerController(QObject):
 
         if group_parent:
             group_parent.removeRow(remove_row)
-
-            # remove empty groups
-            if not group_parent.rowCount():
-                self._executor.remove_task(group_parent.data(Qt.UserRole))
         else:
             self.view.tree_view.tasks_model.removeRow(remove_row)
 
     @Slot()
     def _on_remove_selected_tasks(self) -> None:
-        for task in self.get_selected_tasks():
-            self._executor.remove_task(task)
+        self.remove_tasks(self.get_selected_tasks())
+
+    def remove_tasks(self, tasks: Iterable[TaskUnit]) -> None:
+        """Remove the tasks, skipping those that are running or have a running child."""
+        for task in list(tasks):
+            with contextlib.suppress(TaskError):
+                self._executor.remove_task(task)
 
     def get_all_tasks(self) -> List[TaskUnit]:
         """Get a list of all tasks in the tree view."""
