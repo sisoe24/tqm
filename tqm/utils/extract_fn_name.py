@@ -19,7 +19,7 @@ def extract_fn_name(func: Optional[Callable[..., Any]]) -> str:
         return ''
 
     if isinstance(func, partial):
-        return func.func.__name__
+        return extract_fn_name(func.func)
 
     try:
         return func.__name__

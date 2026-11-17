@@ -55,7 +55,7 @@ class _TaskButtonsController(QObject):
         table_ops = self._view.toolbar.table_options
         table_ops.reset_layout.triggered.connect(self.reset_layout)
         table_ops.resize_columns.triggered.connect(self.resize_columns)
-        table_ops.expand_all.toggled.connect(self.toggle_expand)
+        table_ops.expand_all.triggered.connect(self._view.tree_view.expandAll)
         table_ops.set_max_workers.triggered.connect(self.set_max_workers)
 
     @Slot()
@@ -88,10 +88,6 @@ class _TaskButtonsController(QObject):
 
         with open_settings('w', json_file_path=self._settings_path) as s:
             s.max_workers = value
-
-    @Slot()
-    def toggle_expand(self, expand: bool) -> None:
-        self._view.toggle_expand(expand)
 
     @Slot()
     def reset_layout(self) -> None:
@@ -204,7 +200,6 @@ class TaskManagerController(QObject):
 
     def add_task(self, task: TaskUnit) -> None:
         task.item = self.view.tree_view.tasks_model.add_task(task)
-        self.view.toggle_expand(True)
 
     def remove_task(self, task: TaskUnit) -> None:
         """
@@ -232,6 +227,9 @@ class TaskManagerController(QObject):
 
         if group_parent:
             group_parent.removeRow(remove_row)
+            group = task.group
+            group.progress_bar.maximum = len(group.tasks)
+            self._on_task_finished(task)
         else:
             self.view.tree_view.tasks_model.removeRow(remove_row)
 

@@ -248,7 +248,6 @@ def test_log_view_limits_its_blocks(app: TQManager):
     assert app.findChild(QPlainTextEdit, 'TqmTasksLogs').maximumBlockCount() > 0
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V69')
 def test_add_keeps_a_collapsed_group_collapsed(app: TQManager, view: TaskTreeView):
     app.add_tasks(TaskGroupBuilder('G').with_tasks(noop_task('M').build()).build())
     view.collapseAll()
@@ -258,7 +257,6 @@ def test_add_keeps_a_collapsed_group_collapsed(app: TQManager, view: TaskTreeVie
     assert not view.isExpanded(find_row(view, 'G'))
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V73')
 def test_click_that_empties_the_selection_raises_nothing(qtbot: QtBot, app: TQManager, view: TaskTreeView):
     add_rows(app, 'Aaa', 'Bbb')
     click(view, 'Aaa')
@@ -269,7 +267,6 @@ def test_click_that_empties_the_selection_raises_nothing(qtbot: QtBot, app: TQMa
     assert not errors
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V73')
 def test_debug_panel_shows_the_clicked_task(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Aaa', 'Bbb')
     view.setSelectionMode(view.MultiSelection)
@@ -281,7 +278,6 @@ def test_debug_panel_shows_the_clicked_task(app: TQManager, view: TaskTreeView):
     assert populate.call_args[0][0].name == 'Aaa'
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V74')
 def test_a_key_selects_all_when_a_name_starts_with_a(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Aaa', 'Bbb', 'Ccc')
     view.setFocus()
@@ -291,7 +287,6 @@ def test_a_key_selects_all_when_a_name_starts_with_a(app: TQManager, view: TaskT
     assert selected(view) == ['Aaa', 'Bbb', 'Ccc']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V74')
 def test_second_a_key_clears_the_selection_when_a_name_starts_with_a(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Aaa', 'Bbb', 'Ccc')
     view.setFocus()
@@ -302,7 +297,6 @@ def test_second_a_key_clears_the_selection_when_a_name_starts_with_a(app: TQMana
     assert selected(view) == []
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V75')
 def test_click_after_select_all_selects_one_row(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Xxx', 'Bbb', 'Ccc')
     view.setFocus()
@@ -313,7 +307,6 @@ def test_click_after_select_all_selects_one_row(app: TQManager, view: TaskTreeVi
     assert selected(view) == ['Bbb']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V75')
 def test_shift_released_elsewhere_leaves_single_selection(app: TQManager, view: TaskTreeView, search_bar: QLineEdit):
     add_rows(app, 'Xxx', 'Bbb')
     view.setFocus()
@@ -326,7 +319,6 @@ def test_shift_released_elsewhere_leaves_single_selection(app: TQManager, view: 
     assert selected(view) == ['Bbb']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V76')
 def test_search_with_an_invalid_regex_still_matches_the_text(app: TQManager, view: TaskTreeView, search_bar: QLineEdit):
     add_rows(app, 'Aaa(1)', 'Bbb')
 
@@ -335,7 +327,6 @@ def test_search_with_an_invalid_regex_still_matches_the_text(app: TQManager, vie
     assert top_rows(view) == ['Aaa(1)']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V77')
 @pytest.mark.parametrize('text', [':', 'T'])
 def test_search_ignores_timestamps(app: TQManager, view: TaskTreeView, search_bar: QLineEdit, text: str):
     add_rows(app, 'Aaa', 'Bbb')
@@ -345,7 +336,6 @@ def test_search_ignores_timestamps(app: TQManager, view: TaskTreeView, search_ba
     assert top_rows(view) == []
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V78')
 def test_closing_the_search_bar_clears_the_filter(app: TQManager, view: TaskTreeView, search_bar: QLineEdit):
     add_rows(app, 'Aaa', 'Bbb')
     button = app.findChild(TasksViewToolbar).search_btn
@@ -363,7 +353,6 @@ def add_group(app: TQManager) -> Any:
     return member
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V79')
 def test_filter_on_a_group_keeps_its_children(app: TQManager, view: TaskTreeView, search_bar: QLineEdit):
     add_group(app)
 
@@ -373,7 +362,6 @@ def test_filter_on_a_group_keeps_its_children(app: TQManager, view: TaskTreeView
     assert model.rowCount(model.index(0, 0)) == 1
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V79')
 def test_filter_follows_a_child_change(app: TQManager, view: TaskTreeView, search_bar: QLineEdit):
     member = add_group(app)
     search_bar.setText('zzz')
@@ -385,7 +373,6 @@ def test_filter_follows_a_child_change(app: TQManager, view: TaskTreeView, searc
     assert top_rows(view) == ['Gruppe']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V79')
 def test_clearing_the_filter_keeps_groups_expanded(app: TQManager, view: TaskTreeView, search_bar: QLineEdit):
     add_group(app)
 
@@ -395,7 +382,6 @@ def test_clearing_the_filter_keeps_groups_expanded(app: TQManager, view: TaskTre
     assert view.isExpanded(find_row(view, 'Gruppe'))
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V80')
 def test_expand_all_menu_item_expands(app: TQManager, view: TaskTreeView):
     add_group(app)
     view.collapseAll()
@@ -405,7 +391,6 @@ def test_expand_all_menu_item_expands(app: TQManager, view: TaskTreeView):
     assert view.isExpanded(find_row(view, 'Gruppe'))
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V81')
 def test_sort_order_survives_a_restart(qtbot: QtBot, app: TQManager, view: TaskTreeView):
     # The view saves on a 2s timer that its own first layout starts.
     run_events(qtbot, 2100)
@@ -420,14 +405,12 @@ def test_sort_order_survives_a_restart(qtbot: QtBot, app: TQManager, view: TaskT
     assert section == 4
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V82')
 def test_default_sort_is_natural_and_ascending(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Task1', 'Task2', 'Task3', 'Task10')
 
     assert top_rows(view) == ['Task1', 'Task2', 'Task3', 'Task10']
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V83')
 def test_group_progress_follows_a_removed_member(qtbot: QtBot, app: TQManager, view: TaskTreeView):
     members = [noop_task(f'c{i}').build() for i in range(3)]
     group = TaskGroupBuilder('G').with_tasks(*members).build()
@@ -447,7 +430,6 @@ class CallableObject:
         pass
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V84')
 @pytest.mark.parametrize('builder', [
     lambda: noop_task('IntKeys').with_data(x={1: 'a'}),
     lambda: noop_task('MixedKeys').with_data(x={1: 'a', 'b': 2}),
@@ -458,7 +440,6 @@ def test_debug_panel_shows_any_task(app: TQManager, builder: Callable[[], TaskBu
         app.findChild(DebugWidget).populate(builder().build())
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V84')
 def test_debug_panel_replaces_the_previous_history(app: TQManager):
     panel = app.findChild(DebugWidget)
     panel.populate(noop_task('Ok').build())
@@ -473,7 +454,6 @@ def test_debug_panel_replaces_the_previous_history(app: TQManager):
     assert panel.findChild(StateHistoryWidget).topLevelItemCount() == 2
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V85')
 def test_registry_tab_keeps_every_task_after_sorting(app: TQManager):
     names = {f'task{i}' for i in range(12)}
     app.add_tasks(*[noop_task(name).build() for name in names])
@@ -487,7 +467,6 @@ def test_registry_tab_keeps_every_task_after_sorting(app: TQManager):
     assert {table.item(row, 0).text() for row in range(table.rowCount())} == names
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V86')
 def test_context_menus_do_not_pile_up(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Aaa')
 
@@ -499,7 +478,6 @@ def test_context_menus_do_not_pile_up(app: TQManager, view: TaskTreeView):
     assert (len(view.findChildren(QMenu)), len(view.findChildren(QAction))) == before
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V86')
 def test_running_task_shows_no_empty_menu(qtbot: QtBot, app: TQManager, view: TaskTreeView, gate: Callable[[], Event]):
     release = gate()
     task = TaskBuilder('Run').with_event(lambda t: release.wait()).build()
@@ -510,7 +488,6 @@ def test_running_task_shows_no_empty_menu(qtbot: QtBot, app: TQManager, view: Ta
     assert open_context_menu(view, 'Run') != []
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V87')
 def test_view_parent_is_callable(view: TaskTreeView):
     with must_not_raise(TypeError):
         view.parent()

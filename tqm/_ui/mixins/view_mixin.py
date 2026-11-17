@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict
 from pathlib import Path
 from functools import partial
 
+import shiboken2
 from PySide2.QtCore import Qt, QPoint, QTimer, QByteArray
 from PySide2.QtWidgets import QMenu, QAction
 
@@ -43,6 +44,7 @@ class ViewStateMixing:
         self.__header = self.__view.header()
         self.__parent = 'tasks'
 
+        self.__header.setSortIndicator(0, Qt.AscendingOrder)
         self.__initial_state = self.__header.saveState()
         self.__columns: Dict[str, int] = {}
 
@@ -53,6 +55,7 @@ class ViewStateMixing:
 
         self.__header.sectionMoved.connect(self._activate_timer)
         self.__header.sectionResized.connect(self._activate_timer)
+        self.__header.sortIndicatorChanged.connect(self._activate_timer)
         self.__header.setContextMenuPolicy(Qt.CustomContextMenu)
         self.__header.customContextMenuRequested.connect(self._on_header_menu)
 
@@ -165,12 +168,14 @@ class ViewStateMixing:
 
         for col, i in self.get_columns().items():
 
-            act = QAction(col, self.__view, checkable=True)
+            act = QAction(col, menu, checkable=True)
             act.setChecked(not self.__view.isColumnHidden(i))
             act.toggled.connect(partial(self._update_columns, col))
             menu.addAction(act)
 
         menu.exec_(self.__view.mapToGlobal(pos))
+        # Delete now, on the main thread: a parented menu would pile up on the view.
+        shiboken2.delete(menu)
 
     def reset_table_state(self) -> None:
         """

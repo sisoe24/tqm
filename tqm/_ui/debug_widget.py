@@ -65,7 +65,7 @@ class TaskPropertyTreeItem(QTreeWidgetItem):
         self.key = key
         self.value = value
         self.is_parent_node = is_parent
-        self.setText(0, key)
+        self.setText(0, str(key))
 
         if not is_parent:
             self.setText(1, str(value))
@@ -110,6 +110,8 @@ class TasksList(QWidget):
 
     def _load_tasks(self) -> None:
         tasks = self._executor.registry
+        # setItem with sorting on moves rows mid-loop, so later cells land on the wrong row.
+        self._tasks_table.setSortingEnabled(False)
         self._tasks_table.setRowCount(len(tasks))
 
         for row, task in enumerate(tasks):
@@ -130,6 +132,8 @@ class TasksList(QWidget):
 
             # parent
             self._tasks_table.setItem(row, 4, QTableWidgetItem(str(task.parent)))
+
+        self._tasks_table.setSortingEnabled(True)
 
 
 class DebugWidget(Frame):
@@ -165,7 +169,7 @@ class DebugWidget(Frame):
     def _add_properties(self, parent: QTreeWidgetItem, data: Dict[str, Any]) -> None:
         """Recursively add dictionary data to tree."""
 
-        for key, value in sorted(data.items()):
+        for key, value in sorted(data.items(), key=lambda kv: str(kv[0])):
             if isinstance(value, dict):
                 item = TaskPropertyTreeItem(parent, key, '', True)
                 self._add_properties(item, value)

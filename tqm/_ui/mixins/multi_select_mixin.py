@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from PySide2.QtGui import QKeyEvent, QMouseEvent
 from PySide2.QtCore import Qt
@@ -27,17 +27,19 @@ class MultiSelectMixin:
         self.view = view
         self.view.setSelectionMode(QAbstractItemView.SingleSelection)
 
-    @property
-    def parent(self) -> QAbstractItemView:
-        return cast(QAbstractItemView, super())
-
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        # Read Shift from the click: its release can reach another widget and leave the mode stuck.
+        if event.modifiers() & Qt.ShiftModifier:
+            self.view.setSelectionMode(QAbstractItemView.MultiSelection)
+        else:
+            self.view.setSelectionMode(QAbstractItemView.SingleSelection)
+
         if (
             event.button() == Qt.RightButton
             and self.view.selectionMode() == QAbstractItemView.SingleSelection
         ):
             return
-        return self.parent.mousePressEvent(event)
+        super().mousePressEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """
@@ -63,8 +65,10 @@ class MultiSelectMixin:
             else:
                 self.view.clearSelection()
                 self.view.setSelectionMode(QAbstractItemView.SingleSelection)
+            # The view's keyboard search would jump to a row named A and change the selection.
+            return
 
-        self.parent.keyPressEvent(event)
+        super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         """
@@ -82,4 +86,4 @@ class MultiSelectMixin:
         """
         if event.key() == Qt.Key_Shift:
             self.view.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.parent.keyReleaseEvent(event)
+        super().keyReleaseEvent(event)
