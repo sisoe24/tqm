@@ -19,7 +19,6 @@ def test_docstrings_say_callbacks_fire_on_the_final_outcome(method: object):
     assert 'each' not in method.__doc__
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V29')
 def test_readme_uses_existing_builder_methods():
     readme = (ROOT / 'README.md').read_text()
 
@@ -27,16 +26,13 @@ def test_readme_uses_existing_builder_methods():
         assert hasattr(TaskBuilder, name), name
 
 
-V54 = pytest.mark.xfail(strict=True, raises=AssertionError, reason='V54')
-
-
 @pytest.mark.parametrize('stale', [
-    pytest.param('from tqm.retry_policy import', marks=V54),
-    pytest.param('LinearOffset', marks=V54),
+    'from tqm.retry_policy import',
+    'LinearOffset',
     'lambda _: os.path.exists',
     'retry_interval_ms',
-    pytest.param('`with_file`', marks=V54),
-    pytest.param('task.update_progress', marks=V54),
+    '`with_file`',
+    'task.update_progress',
 ])
 def test_docstrings_show_working_examples(stale: str):
     assert stale not in Path(task_builder.__file__).read_text()
@@ -52,13 +48,11 @@ def test_package_version_matches_the_metadata():
     assert f'version = "{tqm.__version__}"' in PYPROJECT
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V64')
 def test_pytest_is_not_a_runtime_dependency():
     runtime = PYPROJECT.split('[tool.poetry.dependencies]')[1].split('[')[0]
 
     assert 'pytest' not in runtime
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V64')
 def test_no_script_points_at_the_ignored_sandbox():
     assert 'sandbox.' not in PYPROJECT

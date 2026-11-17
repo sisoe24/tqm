@@ -60,7 +60,6 @@ def test_preset_path_variable_is_not_overwritten(name: str, tmp_path: Path, monk
     assert os.environ[name] == preset
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V58')
 def test_mono_font_variable_wins_over_the_bundled_font(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv('TQM_MONO_FONT', 'Courier New')
     get_monospace_font.cache_clear()

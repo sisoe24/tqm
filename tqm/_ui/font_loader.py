@@ -8,8 +8,11 @@ from PySide2.QtGui import QFont, QFontDatabase
 
 
 def _load_custom_monospace_font() -> str:
-    """Load bundled JetBrains Mono font from resources"""
-    # Try to load from resources
+    """Return TQM_MONO_FONT if set, else the bundled JetBrains Mono, else a system font."""
+    user_font = os.getenv('TQM_MONO_FONT', '')
+    if user_font:
+        return user_font
+
     font_id = QFontDatabase.addApplicationFont(':/font/JetBrainsMonoNL-Regular.ttf')
 
     if font_id >= 0:
@@ -19,10 +22,6 @@ def _load_custom_monospace_font() -> str:
             return font_families[0]
 
     # Fallback to system font
-    user_font = os.getenv('TQM_MONO_FONT', '')
-    if user_font:
-        return user_font
-
     if sys.platform == 'darwin':
         return 'Menlo'
     elif sys.platform == 'win32':

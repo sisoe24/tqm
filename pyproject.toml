@@ -17,7 +17,6 @@ classifiers = [
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Desktop Environment :: Window Managers",
     "Topic :: System :: Monitoring",
@@ -28,7 +27,6 @@ include = [
 ]
 
 [tool.poetry.scripts]
-tqm-dev = "sandbox.dev:main"
 tqm-demo = "tqm.demo.demo:run_demo"
 
 [tool.coverage.paths]
@@ -63,9 +61,9 @@ add_imports = "from __future__ import annotations"
 [tool.poetry.dependencies]
 python = ">=3.7.7,<3.11"
 pyside2 = "^5.15.2.1"
-pytest = "^7.4.3"
 
 [tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
 pytest-qt = "^4.2.0"
 pytest-cov = "^4.1.0"
 pytest-repeat = "^0.9.3"

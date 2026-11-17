@@ -217,12 +217,6 @@ class TaskState:
         return self.current == TaskStateEnum.INACTIVE
 
     @property
-    def is_active(self) -> bool:
-        return any([
-            self.is_running, self.is_retrying, self.is_blocked,
-        ])
-
-    @property
     def is_retryable(self) -> bool:
         return self.is_failed or self.is_completed
 

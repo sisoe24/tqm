@@ -75,12 +75,16 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
     def with_retry_policy(self: Builder, policy: RetryPolicy) -> Builder:
         """Sets the retry policy for the task builder.
 
-        >>> from tqm.retry_policy import ConditionalRetryPolicy, LinearOffset
-        >>> my_policy = ConditionalRetryPolicy(max_attempts=5, LinearOffset(delay_seconds=5))
+        >>> from tqm import retry_policy
+        >>> my_policy = retry_policy.ConditionalRetryPolicy(
+        ...     5, retry_policy.LinearBackoff(5), lambda exception: isinstance(exception, IOError)
+        ... )
         >>> with_retry_policy(my_policy)
 
         TODO: Add documentation about custom policy.
         """
+        if not isinstance(policy, RetryPolicy):
+            raise TypeError(f'Expected a RetryPolicy, got {policy!r}')
         self.retry_policy = policy
         return self
 
@@ -130,7 +134,7 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
 
         >>> with_action(
         ...    'Open File',
-        ...    lambda t: QDesktopServices.openUrl(f'file://{task.data["file"]}'),
+        ...    lambda task: QDesktopServices.openUrl(f'file://{task.data["file"]}'),
         ...    visibility=TaskActionVisibility.ON_COMPLETED
         ... )
         >>> with_action(
@@ -142,7 +146,7 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         An action is a context menu item that is displayed when the task is right-clicked.
         Can be called multiple times to add multiple actions.
 
-        Tip: If you need to open a file, use `with_file` instead.
+        Tip: If you need to open a file, use `with_file_action` instead.
 
         """
         self._actions.append(TaskAction[TaskType](label, execute, visibility))
@@ -358,7 +362,7 @@ class TaskBuilder(_TaskBuilderBase['TaskBuilder', TaskExecutable]):
 
         NOTE:
             - The first argument is the task itself.
-            - The progress is emitted by the `task.update_progress` signal
+            - The event reports progress with `task.emit_progress(value)`
 
         """
         self.event = event

@@ -26,9 +26,9 @@ class TQManager(QMainWindow):
     This class is the main entry point for the TQManager. It provides a simple
     interface for adding tasks to a queue and executing them.
 
-    >>> widget = TQManager()
-    >>> with widget.begin_task_insert() as tasks:
-    ...    tasks.add_event(lambda t: None, label='Dummy Task', comment='Does nothing')
+    >>> widget = TQManager('my_app')
+    >>> with widget.create_group('Group') as group:
+    ...    group.add_event(lambda t: None, label='Dummy Task', comment='Does nothing')
     >>> widget.start_workers()
     """
 
@@ -115,9 +115,13 @@ class TQManager(QMainWindow):
 
         ```
         task = TaskBuilder().build()
-        group = TaskGroupBuilder().build()
-        task_manager.add(group, task)
+        group = TaskGroupBuilder().with_tasks(TaskBuilder().build()).build()
+        task_manager.add_tasks(group, task)
         ```
+
+        Raises:
+            TaskError: If called from another thread than the one that created the manager,
+                or if a task was removed before.
 
         """
         for task in tasks:
@@ -139,12 +143,12 @@ class TQManager(QMainWindow):
             show_progress (bool): If the task should show a progress.
             label (Optional[str], optional): The label of the task. If not provided,
                 a default label will be generated.
-            details (Optional[str], optional): Comment of the task. Defaults to ''.
+            comment (str, optional): Comment of the task. Defaults to ''.
 
         ```
         add_event(
            execute=lambda task: print(task.name),
-           progress=True,
+           show_progress=True,
            label='My task',
            comment='Comment of the task'
         )
@@ -174,7 +178,10 @@ class TQManager(QMainWindow):
         self.add_tasks(group)
 
     def shutdown(self) -> None:
-        """Shutdown the workers."""
+        """Ask the user, then shut down without waiting.
+
+        Tasks that have not started end deleted. Running tasks finish without retries.
+        """
         if QMessageBox.question(
             None,
             'Shutdown',

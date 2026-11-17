@@ -26,7 +26,6 @@ class _TaskButtonsController(QObject):
 
     """
 
-    workers_started = Signal()
     max_workers_updated = Signal(int)
 
     def __init__(
@@ -122,9 +121,6 @@ class _TaskButtonsController(QObject):
 
 
 class TaskManagerController(QObject):
-    task_removed = Signal(object)
-    task_retried = Signal(object)
-
     def __init__(
         self,
         view: TaskManagerView,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from typing import (TYPE_CHECKING, Any, Set, Dict, Tuple, Generic, TypeVar,
-                    Iterator, Optional, Generator)
+                    Iterator, Optional)
 from itertools import count
 from dataclasses import field, dataclass
 
@@ -82,11 +82,6 @@ class TaskBase(Generic[T]):
             LOGGER.debug('Adding %s to parent %s', self.name, self.parent.name)
             self.parent.children.add(self)
 
-    def __eq__(self, value: object) -> bool:
-        if not isinstance(value, TaskBase):
-            raise NotImplementedError(f'Cannot compare a task object to {type(value)}')
-        return self.id == value.id
-
     def __lt__(self, other: TaskBase[T]) -> bool:
         """Comparison method for the heap queue."""
         return self.index < other.index
@@ -99,14 +94,6 @@ class TaskBase(Generic[T]):
         # The tag lets each window show only the logs of its own tasks.
         tag = getattr(self, 'signals', None)
         LOGGER.log(USER_LEVEL, f'{self.name}: {text}', extra={'tqm_signals': tag})
-
-    def get_children(self) -> Set[TaskUnit]:
-        """Return all the children of the task recursively."""
-        def recurse(task: TaskUnit) -> Generator[TaskUnit, Any, None]:
-            for child in filter(lambda t: not t.state.is_inactive, task.children):
-                yield child
-                yield from recurse(child)
-        return set(recurse(self))
 
     def delete(self, comment: str = '') -> None:
         """Mark the task as deleted and clean up resources."""

@@ -70,15 +70,15 @@ class TaskGroup(TaskBase['TaskGroup']):
 
         Args:
             execute (Callable[..., Any]): The event to be executed. The first argument is the task itself.
-            progress (bool): If the task should show a progress.
+            show_progress (bool): If the task should show a progress.
             label (Optional[str], optional): The label of the task. If not provided,
                 a default label will be generated.
-            details (Optional[str], optional): Comment of the task. Defaults to ''.
+            comment (str, optional): Comment of the task. Defaults to ''.
 
         ```
         add_event(
            execute=lambda task: print(task.name),
-           progress=True,
+           show_progress=True,
            label='My task',
            comment='Comment of the task'
         )

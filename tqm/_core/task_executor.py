@@ -204,6 +204,12 @@ class _ExecutorStateTracker(QObject):
 
 
 class TaskExecutor(QObject):
+    """Queue and run tasks on a thread pool. Add and start tasks from the thread that created it.
+
+    Used without a TQManager window, give it a Qt parent, or keep it alive and delete it on
+    the main thread: left to Python's garbage collector it can be freed on a worker thread
+    and crash.
+    """
 
     def __init__(
         self,

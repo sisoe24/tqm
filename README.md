@@ -113,7 +113,7 @@ task = (
     .with_on_completed(lambda t: print("Task completed"))
     .with_on_failed(lambda t: print("Task failed"))
     .with_color("lightblue")
-    .with_retry_failed(max_retries=3)  # Retry up to 3 times if it fails
+    .with_retry(max_attempts=3)  # Retry up to 3 times if it fails
     .build()
 )
 
@@ -136,6 +136,40 @@ task2 = (
 task_manager.add_tasks(task1, task2)
 ```
 
+### Retry policies
+
+```python
+from tqm import TaskBuilder, retry_policy
+
+# retry_if gets the exception and returns True to retry.
+policy = retry_policy.conditional_retry(
+    3, retry_policy.FixedDelay(5), retry_if=lambda exception: isinstance(exception, IOError)
+)
+task = TaskBuilder("Download").with_event(download).with_retry_policy(policy).build()
+```
+
+A group does not retry: `TaskGroupBuilder.build()` raises `TaskGroupError` if the builder has a
+retry policy. Give the retry policy to the tasks in the group.
+
+### Executor events
+
+```python
+task_manager.callbacks.on_task_failed(lambda task, exception: print(task.name, exception))
+```
+
+`on_task_failed` fires once, when the task fails for good, with the task and its exception.
+
+### Threads and lifetime
+
+- Add and start tasks only from the thread that created the manager (the main thread). Calls
+  from other threads raise `TaskError`.
+- A removed task cannot be added again: `add_tasks` raises `TaskError`. Build a new task.
+- `shutdown()` returns at once. Tasks that have not started are removed and end deleted. Running
+  tasks finish in the background, without retries.
+- A `TaskExecutor` used without a `TQManager` window must get a Qt parent, or be kept alive and
+  deleted on the main thread. Left to Python's garbage collector, it can be freed on a worker
+  thread and crash the process.
+
 ## Configuration
 
 tqm stores its settings in:
@@ -145,9 +179,12 @@ tqm stores its settings in:
 ## Environment
 
 - `TQM_QSS_PATH` -Qt stylesheet path
-- `TQM_MONO_FONT` - Monospace font family
+- `TQM_MONO_FONT` - Monospace font family. It replaces the bundled font
 - `TQM_DEBUG` - Enables debug logging when set to '1'
 - `TQM_IDLE_TIMEOUT` - Timeout in milliseconds for idle system detection
+
+tqm does not set `TQM_CONFIG_PATH` or `TQM_SETTINGS_PATH`. Several managers in one process
+each keep their own config folder.
 
 ## Python Version Support
 

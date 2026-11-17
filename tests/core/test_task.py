@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tqm import TaskBuilder
-from tqm._core.task_state import TaskStateEnum, format_duration
+from tqm._core.task_state import format_duration
 
 
 def test_reset_can_restore_the_retry_budget():
@@ -50,20 +50,6 @@ def test_delete_releases_the_callbacks():
     assert not (
         callbacks.on_start or callbacks.on_finish or callbacks.on_failed or callbacks.on_completed
     )
-
-
-def test_is_active_states():
-    state = TaskBuilder().build().state
-
-    for current, expected in [
-        (TaskStateEnum.RUNNING, True),
-        (TaskStateEnum.RETRYING, True),
-        (TaskStateEnum.BLOCKED, True),
-        (TaskStateEnum.WAITING, False),
-        (TaskStateEnum.COMPLETED, False),
-    ]:
-        state.current = current
-        assert state.is_active is expected
 
 
 @pytest.mark.parametrize('seconds, expected', [(0.05, '+50ms'), (3700, '+1h 1m')])

@@ -40,18 +40,18 @@ def bump_version(version: str) -> None:
     # Build the package
     subprocess.run(['poetry', 'build'], cwd=ROOT)
 
-    if input('Do you want to create a release on GitHub? [y/N]: ').lower() == 'y':
-        subprocess.run([
-            'gh', 'release', 'create', f'v{version}', f'dist/*{version}*.gz',
-            '--title', f'v{version}'
-        ], cwd=ROOT)
-
-    # Commit the changes
-    subprocess.run(['git', 'add', '.'], cwd=ROOT)
+    # Commit before the release, so the release tag points at the bump commit.
+    subprocess.run(['git', 'add', 'pyproject.toml', 'tqm/version.py'], cwd=ROOT)
     subprocess.run(['git', 'commit', '-m', f'Bump version to {version}'], cwd=ROOT)
 
     if input('Do you want to push the changes to the remote repository? [y/N]: ').lower() == 'y':
         subprocess.run(['git', 'push'], cwd=ROOT)
+
+        if input('Do you want to create a release on GitHub? [y/N]: ').lower() == 'y':
+            subprocess.run([
+                'gh', 'release', 'create', f'v{version}', *map(str, ROOT.glob(f'dist/*{version}*.gz')),
+                '--title', f'v{version}'
+            ], cwd=ROOT)
 
     print('Done!')
 

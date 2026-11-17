@@ -104,7 +104,7 @@ def test_deferred_to_main():
     assert q.is_empty()
 
 
-def test_main_to_deferred():
+def test_queue_to_deferred():
     q = queue.TasksQueue()
     task = TaskExecutable(execute=lambda: None, name='abc')
 
@@ -116,7 +116,8 @@ def test_main_to_deferred():
 
     assert task.id not in q.deferred
 
-    q.main_to_deferred(task)
+    q.remove_from_queue(task)
+    q.suspend(task)
 
     assert q.is_empty()
     assert q.size() == 0

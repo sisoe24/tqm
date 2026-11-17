@@ -53,13 +53,11 @@ def test_group_builder_does_not_drop_the_retry_policy():
     assert group.retry_policy.max_attempts == 3
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V55')
 @pytest.mark.parametrize('name', ['ConditionalRetryPolicy', 'RetryStatus'])
 def test_policy_names_are_exported(name: str):
     assert hasattr(retry_policy, name)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V55')
 def test_none_retry_policy_is_rejected():
     with must_raise(Exception):
         TaskBuilder().with_retry_policy(None).build()
