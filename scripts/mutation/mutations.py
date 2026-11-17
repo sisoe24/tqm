@@ -1216,6 +1216,7 @@ MUTANTS = [
         'for task in sorted(pending, key=_depth, reverse=True):',
         'for task in sorted(pending, key=_depth):',
         'shutdown: parents dropped before children',
+        equivalent='dropping a parent takes its pending children along, and the loop skips dropped tasks',
     ),
     Mutant(
         EXECUTOR,
@@ -1275,6 +1276,7 @@ MUTANTS = [
         ),
         'pass',
         'predicate event: stale timer acts on task',
+        equivalent='every path that ends a predicate wait stops its timer first',
     ),
     Mutant(
         EXECUTOR,
