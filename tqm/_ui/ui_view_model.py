@@ -22,6 +22,7 @@ from .context_menu import TaskFileMenu
 from .debug_widget import DebugWidget
 from .mixins.view_mixin import ViewStateMixing
 from .._core.task_actions import TaskAction, TaskActionVisibility
+from .._core.task_builder import TaskBuilder
 from .._core.task_executor import TaskExecutor
 from .progress_bar_delegate import ProgressBarDelegate
 from .mixins.multi_select_mixin import MultiSelectMixin
@@ -81,7 +82,9 @@ class TreeModel(QStandardItemModel):
         group_item.setFont(f)
 
         for task in task_group.tasks:
-            task.color = task_group.color
+            # A task keeps its own color; one left at the default takes the group's.
+            if task.color == TaskBuilder.DEFAULT_COLOR:
+                task.color = task_group.color
 
             task.item = TaskItem(task.name, foreground=task.color)
             task.item.setIcon(QIcon(':/icons/dark/circle-line'))

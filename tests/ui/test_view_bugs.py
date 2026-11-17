@@ -187,7 +187,6 @@ def test_removed_task_is_released(qtbot: QtBot, app: TQManager):
     assert alive() is None
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V61')
 def test_float_progress_is_not_truncated(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
     release = gate()
 
@@ -204,7 +203,6 @@ def test_float_progress_is_not_truncated(qtbot: QtBot, app: TQManager, gate: Cal
     assert cell_data(app.findChild(TaskTreeView), 'T', 'Progress') == 12.7
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V61')
 def test_progress_text_scales_with_min_max():
     task = TaskBuilder().with_event(lambda t: None, show_progress=True).with_min_max(0, 10).build()
     options = QStyleOptionProgressBar()

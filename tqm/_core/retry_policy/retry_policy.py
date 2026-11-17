@@ -80,13 +80,13 @@ class SimpleRetryPolicy(RetryPolicy):
 
 
 class ConditionalRetryPolicy(RetryPolicy):
-    """Retry policy that considers a callable"""
+    """Retry while the condition, called with the exception, returns True."""
 
     def __init__(
         self,
         max_attempts: int,
         delay_strategy: DelayStrategy,
-        condition: Callable[..., bool]
+        condition: Callable[[Exception], bool]
     ):
         super().__init__(max_attempts, delay_strategy)
         self.condition = condition
@@ -96,8 +96,8 @@ class ConditionalRetryPolicy(RetryPolicy):
             return RetryStatus.FAIL
 
         try:
-            return RetryStatus.SUCCESS if self.condition() else RetryStatus.RETRY
-        except Exception as e:
+            return RetryStatus.RETRY if self.condition(context.exception) else RetryStatus.FAIL
+        except Exception:
             return RetryStatus.FAIL
 
 
@@ -132,7 +132,7 @@ class ExceptionBasedRetryPolicy(RetryPolicy):
             return RetryStatus.FAIL
 
         # If retry_on is specified, only retry those exceptions
-        if self._matches_exception_list(context.exception, self.retry_on):
+        if not self.retry_on or self._matches_exception_list(context.exception, self.retry_on):
             return RetryStatus.RETRY
 
         return RetryStatus.FAIL

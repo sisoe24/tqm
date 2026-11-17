@@ -5,7 +5,6 @@ from typing import Any, List, Callable
 from threading import Event
 from unittest import mock
 
-import pytest
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskExecutor, TaskGroupBuilder
@@ -79,7 +78,6 @@ def test_retry_does_not_resurrect_a_deleted_task(executor: TaskExecutor, step_po
     assert task.state.is_deleted
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V24')
 def test_retrying_a_group_retries_its_failed_members(qtbot: QtBot, app: TQManager):
     runs: List[int] = []
 
@@ -98,7 +96,6 @@ def test_retrying_a_group_retries_its_failed_members(qtbot: QtBot, app: TQManage
     assert len(runs) == 2
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V52')
 def test_manual_retry_after_exhaustion_gets_the_full_budget(
     qtbot: QtBot,
     executor: TaskExecutor,

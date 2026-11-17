@@ -32,7 +32,7 @@ class _ExecutorCallbacks(QObject):
     task_added = Signal(object)
     task_removed = Signal(object)
     task_finished = Signal(object)
-    task_progress_updated = Signal(object, int)
+    task_progress_updated = Signal(object, float)
 
     runner_started = Signal(object)
     runner_completed = Signal(object)
@@ -365,7 +365,13 @@ class TaskExecutor(QObject):
             LOGGER.warning('Task manager is shutting down. Cannot retry task')
             return
 
-        task.reset('Reset & Retry')
+        # A manual retry gets the full retry budget again.
+        task.reset('Reset & Retry', reset_attempts=True)
+
+        # Reset members are queued when the group starts again.
+        for member in getattr(task, 'tasks', ()):
+            if member.state.is_failed:
+                member.reset('Reset & Retry', reset_attempts=True)
 
         for child in task.children.copy():
             if child.state.is_failed:
@@ -377,8 +383,10 @@ class TaskExecutor(QObject):
         ):
             self.retry_task(task.group)
 
-        self._initialize_task(task)
-        self._start_task(task)
+        # Restarting the group may have queued this member already.
+        if task.state.is_inactive:
+            self._initialize_task(task)
+            self._start_task(task)
 
     def _on_retry_due(self, task: TaskUnit) -> None:
         # The task may have been removed or retried by hand during the delay.
@@ -504,6 +512,8 @@ class TaskExecutor(QObject):
         for member in list(group.tasks):
             if member not in self.registry:
                 self._register(member)
+            elif member.state.is_inactive:
+                self._initialize_task(member)
         self._settle_group(group)
         self.start_workers()
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 from typing import Any, List
 
-import pytest
 from PySide2.QtWidgets import QApplication
 
 from tqm import TaskBuilder, TaskExecutor
@@ -129,7 +128,6 @@ def test_constructor_enforces_minimum_workers(step_pool: StepPool):
     assert TaskExecutor(1, threadpool=step_pool).max_workers == 2
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V66')
 def test_default_execute_succeeds(executor: TaskExecutor, step_pool: StepPool):
     from tqm import TaskExecutable
     task = TaskExecutable(name='Default')
@@ -141,7 +139,6 @@ def test_default_execute_succeeds(executor: TaskExecutor, step_pool: StepPool):
     assert task.state.is_completed
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V66')
 def test_task_error_needs_no_message():
     from tqm.exceptions import TaskError
     try:

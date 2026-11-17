@@ -413,3 +413,14 @@ def test_retry_all_button_retries_failed_tasks(qtbot: QtBot, app: TQManager):
     app.findChild(TasksViewToolbar).retry_all_btn.click()
 
     qtbot.wait_until(lambda: task.state.is_completed)
+
+
+def test_group_keeps_a_member_color(app: TQManager):
+    colored = TaskBuilder('Red').with_color('red').build()
+    plain = TaskBuilder('Plain').build()
+    group = TaskGroupBuilder('G').with_color('blue').with_tasks(colored, plain).build()
+
+    app.add_tasks(group)
+
+    assert colored.color.name() == '#ff0000'
+    assert plain.color.name() == '#0000ff'

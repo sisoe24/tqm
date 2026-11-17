@@ -13,7 +13,7 @@ TaskUnit = Union[TaskBase['TaskExecutable'], TaskBase['TaskGroup']]
 
 @dataclass
 class TaskExecutable(TaskBase['TaskExecutable']):
-    execute: Callable[..., Any] = lambda: None
+    execute: Callable[..., Any] = lambda task: None
     group: Optional[TaskGroup] = None
 
     def __post_init__(self) -> None:

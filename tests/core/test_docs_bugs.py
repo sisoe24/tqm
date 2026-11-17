@@ -14,7 +14,6 @@ ROOT = Path(__file__).parent.parent.parent
 PYPROJECT = (ROOT / 'pyproject.toml').read_text()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V20')
 @pytest.mark.parametrize('method', [TaskBuilder.with_on_failed, TaskBuilder.with_on_finish])
 def test_docstrings_say_callbacks_fire_on_the_final_outcome(method: object):
     assert 'each' not in method.__doc__

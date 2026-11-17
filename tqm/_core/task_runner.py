@@ -20,7 +20,7 @@ class RunnerSignals(QObject):
     runner_started = Signal(object)
 
     # progress is used by the user if needed
-    task_progress_updated = Signal(object, int)
+    task_progress_updated = Signal(object, float)
 
 
 class TaskRunner(QRunnable):

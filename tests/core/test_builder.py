@@ -83,10 +83,7 @@ def test_task_builder():
 @pytest.mark.parametrize('color_type, expected', [
     ('blue', QColor(0, 0, 255)),
     ('#0000ff', QColor(0, 0, 255)),
-    pytest.param(
-        'rgb(0, 0, 255)', QColor(0, 0, 255),
-        marks=pytest.mark.xfail(strict=True, raises=AssertionError, reason='V60')
-    ),
+    ('rgb(0, 0, 255)', QColor(0, 0, 255)),
     ((255, 0, 0, 1), QColor(255, 0, 0, 1)),
     (Qt.red, QColor(255, 0, 0)),
     (QColor(255, 0, 0, 1), QColor(255, 0, 0, 1)),

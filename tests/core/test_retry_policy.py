@@ -30,7 +30,6 @@ def test_exception_policy_never_retry_wins():
     assert policy.should_retry(context(KeyError())) == RetryStatus.FAIL
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V21')
 def test_conditional_policy_retries_when_the_condition_is_true():
     error = ValueError()
     seen: List[Exception] = []
