@@ -424,3 +424,17 @@ def test_group_keeps_a_member_color(app: TQManager):
 
     assert colored.color.name() == '#ff0000'
     assert plain.color.name() == '#0000ff'
+
+
+def test_clear_completed_reaches_group_members(qtbot: QtBot, app: TQManager):
+    done = TaskBuilder('Done').build()
+    failed = TaskBuilder('Failed').with_event(raise_error).build()
+    group = TaskGroupBuilder('G').with_tasks(done, failed).build()
+    app.add_tasks(group)
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_failed)
+
+    app.operations.clear_completed_tasks()
+
+    assert done.state.is_deleted
+    assert row_names(app.findChild(TaskTreeView)) == {'G', 'Failed'}

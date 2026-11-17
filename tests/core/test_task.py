@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import List
+
 import pytest
+from pytestqt.qtbot import QtBot
 
 from tqm import TaskBuilder
 from tqm._core.task_state import format_duration
+from tqm._core.task_predicate import PredicateEventType
 
 
 def test_reset_can_restore_the_retry_budget():
@@ -55,3 +59,13 @@ def test_delete_releases_the_callbacks():
 @pytest.mark.parametrize('seconds, expected', [(0.05, '+50ms'), (3700, '+1h 1m')])
 def test_format_duration(seconds: float, expected: str):
     assert format_duration(seconds) == expected
+
+
+def test_predicate_stops_its_timer_when_attempts_run_out(qtbot: QtBot):
+    task = TaskBuilder().with_predicate(lambda: False, max_attempts=1, delay_ms=1).build()
+    events: List[PredicateEventType] = []
+
+    task.predicate.evaluate(events.append)
+    qtbot.wait_until(lambda: PredicateEventType.FAIL in events)
+
+    assert task.predicate.timer is None
