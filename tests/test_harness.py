@@ -91,7 +91,8 @@ def test_gate_is_released_at_teardown(gate: Callable[[], Any]) -> None:
 
 
 @pytest.mark.parametrize('source, expected', [
-    ('import os; os.abort()', 'exited with'),
+    # SIGKILL, not abort: macOS shows a crash dialog for every abort.
+    ('import os, signal; os.kill(os.getpid(), signal.SIGKILL)', 'exited with'),
     ('import time; time.sleep(60)', 'hung for'),
 ])
 def test_script_crash_and_hang_are_assertion_errors(
