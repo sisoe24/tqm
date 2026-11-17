@@ -38,7 +38,6 @@ def test_docstrings_show_working_examples(stale: str):
     assert stale not in Path(task_builder.__file__).read_text()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V63')
 def test_python_floor_is_3_9():
     assert re.search(r'^python = ">=3\.9', PYPROJECT, re.M)
 

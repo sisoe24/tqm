@@ -13,8 +13,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -59,7 +57,7 @@ length_sort = true
 add_imports = "from __future__ import annotations"
 
 [tool.poetry.dependencies]
-python = ">=3.7.7,<3.11"
+python = ">=3.9,<3.11"
 pyside2 = "^5.15.2.1"
 
 [tool.poetry.group.dev.dependencies]

@@ -188,11 +188,11 @@ each keep their own config folder.
 
 ## Python Version Support
 
-TQM currently supports Python 3.7+ to ensure compatibility with VFX environments where older Python versions are still common. We intentionally keep zero dependencies (except PySide2) so VFX applications can use TQM right away.
+TQM currently supports Python 3.9 and 3.10, for VFX environments that still ship older Python versions. We intentionally keep zero dependencies (except PySide2) so VFX applications can use TQM right away.
 However, we'll phase out support for older versions with major releases:
 
-- Current (0.x): Python 3.7+
-- Future (1.x): Python 3.10+ (dropping 3.7, 3.8, and 3.9 support)
+- Current (0.x): Python 3.9+
+- Future (1.x): Python 3.10+ (dropping 3.9 support)
 
 Older TQM versions will remain available on the GitHub releases page, but won't receive updates once we move to newer Python versions.
 
