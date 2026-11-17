@@ -42,7 +42,6 @@ def test_python_floor_is_3_9():
     assert re.search(r'^python = ">=3\.9', PYPROJECT, re.M)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason='V64')
 def test_package_version_matches_the_metadata():
     assert f'version = "{tqm.__version__}"' in PYPROJECT
 
