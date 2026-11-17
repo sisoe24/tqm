@@ -19,7 +19,11 @@ from .utils.harness import StepPool
 
 ROOT = Path(__file__).parent.parent
 WATCHDOG_SECONDS = int(os.getenv('TQM_TEST_WATCHDOG', '60'))
-WATCHDOG_LOG = Path(os.getenv('TQM_TEST_WATCHDOG_LOG', ROOT / 'tmp' / 'test-watchdog.log'))
+# One log per xdist worker, so workers do not overwrite each other.
+_WORKER = os.getenv('PYTEST_XDIST_WORKER', '')
+WATCHDOG_LOG = Path(os.getenv(
+    'TQM_TEST_WATCHDOG_LOG', ROOT / 'tmp' / f'test-watchdog{"-" + _WORKER if _WORKER else ""}.log'
+))
 
 _open_gates: List[threading.Event] = []
 
