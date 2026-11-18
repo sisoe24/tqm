@@ -15,7 +15,7 @@ from PySide2.QtTest import QTest
 from pytestqt.qtbot import QtBot
 from PySide2.QtWidgets import (QMenu, QAction, QLineEdit, QApplication,
                                QTableWidget, QPlainTextEdit,
-                               QStyleOptionProgressBar)
+                               QTreeWidget, QStyleOptionProgressBar)
 
 from tqm import TQManager, TaskBuilder, TaskGroupBuilder
 from tqm._core.logger import LOGGER
@@ -498,3 +498,17 @@ def test_set_max_workers_with_no_value_asks_the_user(app: TQManager):
         app.operations.set_max_workers()
 
     assert app.executor.max_workers == 7
+
+
+def test_debug_panel_wraps_long_values(qtbot: QtBot, app: TQManager):
+    panel = app.findChild(DebugWidget)
+    tree = next(t for t in panel.findChildren(QTreeWidget) if not isinstance(t, StateHistoryWidget))
+    tree.resize(400, 300)
+    tree.show()
+    qtbot.wait_exposed(tree)
+
+    panel.populate(noop_task('Long').with_data(note='word ' * 200).build())
+    note = tree.findItems('note', Qt.MatchRecursive)[0]
+
+    assert tree.columnWidth(0) + tree.columnWidth(1) <= tree.viewport().width()
+    assert tree.visualItemRect(note).height() > 2 * tree.fontMetrics().height()

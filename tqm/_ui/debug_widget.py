@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from PySide2.QtGui import QFont, QColor
-from PySide2.QtCore import Qt
+from PySide2.QtCore import Qt, QSize, QModelIndex
 from PySide2.QtWidgets import (QLabel, QWidget, QSplitter, QTabWidget,
                                QHeaderView, QPushButton, QTreeWidget,
                                QVBoxLayout, QTableWidget, QTreeWidgetItem,
-                               QTableWidgetItem)
+                               QTableWidgetItem, QStyledItemDelegate,
+                               QStyleOptionViewItem)
 
 from tqm._core.task_executor import TaskExecutor
 
@@ -55,6 +56,19 @@ class StateHistoryWidget(QTreeWidget):
 
         for i in range(self.columnCount()):
             self.resizeColumnToContents(i)
+
+
+class _WrapDelegate(QStyledItemDelegate):
+    """Size rows for wrapped text. QTreeView sizes rows without the column width."""
+
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        # A few pixels less than the column, for the cell margins.
+        width = max(self.parent().columnWidth(index.column()) - 8, 1)
+        text = opt.fontMetrics.boundingRect(0, 0, width, 0, Qt.TextWordWrap, opt.text)
+        base = super().sizeHint(option, index)
+        return QSize(base.width(), max(base.height(), text.height() + 4))
 
 
 class TaskPropertyTreeItem(QTreeWidgetItem):
@@ -148,6 +162,11 @@ class DebugWidget(Frame):
         self._property_tree.setHeaderLabels(['Property', 'Value'])
         self._property_tree.setAlternatingRowColors(True)
         self._property_tree.setStyleSheet('background-color: #282828;')
+        # Long values wrap inside the Value column instead of widening it.
+        self._property_tree.setWordWrap(True)
+        self._property_tree.setItemDelegate(_WrapDelegate(self._property_tree))
+        self._property_tree.header().setStretchLastSection(True)
+        self._property_tree.header().sectionResized.connect(self._property_tree.doItemsLayout)
 
         self._state_tree = StateHistoryWidget()
 
@@ -207,6 +226,5 @@ class DebugWidget(Frame):
         # Expand property tree for better visibility
         self._property_tree.expandAll()
 
-        # Resize property tree columns
-        for i in range(self._property_tree.columnCount()):
-            self._property_tree.resizeColumnToContents(i)
+        # Only the key column fits its contents; the Value column takes the rest and wraps.
+        self._property_tree.resizeColumnToContents(0)
