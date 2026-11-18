@@ -61,6 +61,7 @@ app.setStyle('Fusion')
 # Create the task manager window
 task_manager = TQManager(app_name="my_app")
 task_manager.show()
+task_manager.log("Manager ready")  # shows in this window's log panel
 
 # Add a simple task
 task_manager.add_event(

@@ -33,3 +33,14 @@ def test_task_log_stays_in_its_own_window(qtbot: QtBot, make_manager: Callable[[
 
     other_log = second.findChild(QPlainTextEdit, 'TqmTasksLogs')
     assert 'hello-from-a' not in other_log.toPlainText()
+
+
+def test_manager_log_stays_in_its_own_window(qtbot: QtBot, make_manager: Callable[[str], TQManager]):
+    first, second = make_manager('a'), make_manager('b')
+
+    first.log('hello-from-a')
+
+    own_log = first.findChild(QPlainTextEdit, 'TqmTasksLogs')
+    qtbot.wait_until(lambda: 'hello-from-a' in own_log.toPlainText())
+    other_log = second.findChild(QPlainTextEdit, 'TqmTasksLogs')
+    assert 'hello-from-a' not in other_log.toPlainText()

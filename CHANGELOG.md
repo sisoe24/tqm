@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## v0.3.0
 
+### Added
+
+- `TQManager.log(text)` writes to that manager's log panel and file.
+
 ### Changed
 
 - Python 3.9 or newer is required.
