@@ -4,6 +4,7 @@ from typing import List, Callable
 from threading import Event
 
 from PySide2.QtCore import QTimer
+from PySide2.QtWidgets import QMessageBox, QApplication
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskBuilder, TaskExecutable
@@ -83,3 +84,43 @@ def test_add_task_is_rejected_only_during_shutdown(
     after = TaskBuilder().build()
     app.executor.add_task(after)
     assert after.state.is_waiting
+
+
+def ask_shutdown(app: TQManager) -> QMessageBox:
+    """Call shutdown and return its dialog. Fails if shutdown waits for the answer."""
+    nested: List[bool] = []
+
+    def in_nested_loop() -> None:
+        # Fires only if shutdown runs its own event loop. Answer so it can return.
+        nested.append(True)
+        modal = QApplication.activeModalWidget()
+        if modal:
+            modal.reject()
+
+    QTimer.singleShot(0, in_nested_loop)
+    app.shutdown()
+
+    assert not nested, 'shutdown blocked on its question'
+    dialog = app.findChild(QMessageBox)
+    assert dialog is not None and dialog.isVisible()
+    return dialog
+
+
+def test_shutdown_question_does_not_block(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder().build()
+    app.add_tasks(task)
+
+    dialog = ask_shutdown(app)
+
+    assert task.state.is_waiting
+    dialog.button(QMessageBox.Yes).click()
+    assert task.state.is_deleted
+
+
+def test_shutdown_answered_no_keeps_the_tasks(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder().build()
+    app.add_tasks(task)
+
+    ask_shutdown(app).button(QMessageBox.No).click()
+
+    assert task.state.is_waiting

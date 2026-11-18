@@ -180,15 +180,17 @@ class TQManager(QMainWindow):
     def shutdown(self) -> None:
         """Ask the user, then shut down without waiting.
 
+        The question does not block: this returns at once, and the shutdown runs on Yes.
         Tasks that have not started end deleted. Running tasks finish without retries.
         """
-        if QMessageBox.question(
-            None,
+        dialog = QMessageBox(
+            QMessageBox.Question,
             'Shutdown',
             'Are you sure you want to shutdown the workers? '
             'Note: In-progress tasks will not be terminated.',
-            QMessageBox.Yes | QMessageBox.No
-        ) != QMessageBox.Yes:
-            return
-
-        self.executor.shutdown()
+            QMessageBox.Yes | QMessageBox.No,
+            self
+        )
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        dialog.button(QMessageBox.Yes).clicked.connect(self.executor.shutdown)
+        dialog.open()
