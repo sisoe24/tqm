@@ -124,3 +124,9 @@ def test_shutdown_answered_no_keeps_the_tasks(qtbot: QtBot, app: TQManager):
     ask_shutdown(app).button(QMessageBox.No).click()
 
     assert task.state.is_waiting
+
+
+def test_shutdown_when_idle_does_not_ask(qtbot: QtBot, app: TQManager):
+    app.shutdown()
+
+    assert app.findChild(QMessageBox) is None

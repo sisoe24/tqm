@@ -181,8 +181,13 @@ class TQManager(QMainWindow):
         """Ask the user, then shut down without waiting.
 
         The question does not block: this returns at once, and the shutdown runs on Yes.
+        With no task running or queued there is nothing to lose, so it does not ask.
         Tasks that have not started end deleted. Running tasks finish without retries.
         """
+        if self.executor.status_tracker.is_idle():
+            self.executor.shutdown()
+            return
+
         dialog = QMessageBox(
             QMessageBox.Question,
             'Shutdown',
