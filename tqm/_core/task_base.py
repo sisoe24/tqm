@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from typing import (TYPE_CHECKING, Any, Set, Dict, Tuple, Generic, TypeVar,
-                    Iterator, Optional, Generator)
+                    Iterator, Optional)
 from itertools import count
 from dataclasses import field, dataclass
 
@@ -10,19 +10,18 @@ from PySide2.QtGui import QColor
 
 from .logger import LOGGER, USER_LEVEL
 from .task_state import TaskState
-from .task_runner import BaseRunner
+from .task_runner import RunnerSignals
 from .retry_policy import RetryPolicy, NoRetryPolicy
 from .task_actions import TaskAction
 from .task_options import ProgressBarOptions
-from .._ui.task_item import TaskItem
 from .task_callbacks import TaskCallbacks
 from .task_predicate import TaskPredicate
 
 if TYPE_CHECKING:
+    from .._ui.task_item import TaskItem
     from .task import TaskUnit
 
 T = TypeVar('T')
-W = TypeVar('W', bound=BaseRunner)
 
 _INDEX_CACHE: Dict[str, Iterator[int]] = {}
 
@@ -34,7 +33,7 @@ def index_gen(suffix: str) -> int:
 
 
 @dataclass
-class TaskBase(Generic[T, W]):
+class TaskBase(Generic[T]):
     """Base class for both Task and TaskGroup entities."""
 
     # attributes
@@ -54,7 +53,8 @@ class TaskBase(Generic[T, W]):
     predicate: TaskPredicate = field(default_factory=TaskPredicate, repr=False)
     callbacks: TaskCallbacks[T] = field(default_factory=TaskCallbacks['T'], repr=False)
 
-    runner: W = field(init=False)
+    # The executor's signals, set when the task is added.
+    signals: RunnerSignals = field(init=False, repr=False, compare=False)
 
     # UI
     color: QColor = QColor(220, 220, 220, 255)
@@ -82,12 +82,7 @@ class TaskBase(Generic[T, W]):
             LOGGER.debug('Adding %s to parent %s', self.name, self.parent.name)
             self.parent.children.add(self)
 
-    def __eq__(self, value: object) -> bool:
-        if not isinstance(value, TaskBase):
-            raise NotImplementedError(f'Cannot compare a task object to {type(value)}')
-        return self.id == value.id
-
-    def __lt__(self, other: TaskBase[T, W]) -> bool:
+    def __lt__(self, other: TaskBase[T]) -> bool:
         """Comparison method for the heap queue."""
         return self.index < other.index
 
@@ -96,15 +91,9 @@ class TaskBase(Generic[T, W]):
 
     def log(self, text: str) -> None:
         """Log a message with the task name as prefix."""
-        LOGGER.log(USER_LEVEL, f'{self.name}: {text}')
-
-    def get_children(self) -> Set[TaskUnit]:
-        """Return all the children of the task recursively."""
-        def recurse(task: TaskUnit) -> Generator[TaskUnit, Any, None]:
-            for child in filter(lambda t: not t.state.is_inactive, task.children):
-                yield child
-                yield from recurse(child)
-        return set(recurse(self))
+        # The tag lets each window show only the logs of its own tasks.
+        tag = getattr(self, 'signals', None)
+        LOGGER.log(USER_LEVEL, f'{self.name}: {text}', extra={'tqm_signals': tag})
 
     def delete(self, comment: str = '') -> None:
         """Mark the task as deleted and clean up resources."""
@@ -139,7 +128,6 @@ class TaskBase(Generic[T, W]):
             'data': self.data,
             'comment': self.comment,
             'callbacks': self.callbacks.inspect(),
-            'runner': str(self.runner),
             'state': self.state.inspect(),
             'actions': [action.inspect() for action in self.actions],
             'progress_bar_options': self.progress_bar.inspect(),

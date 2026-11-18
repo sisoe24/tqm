@@ -22,14 +22,18 @@ def test_get_selected_items(qtbot: QtBot, app: TQManager):
     task3 = TaskBuilder('Task3') .build()
     app.add_tasks(task1, task2, task3)
 
-    view = app._view.tree_view
+    view = app.findChild(TaskTreeView)
     select_task(view, 0)
-    select_task(view, 2)
+    select_task(view, 1)
+
+    # the pair is asymmetric, so a selection read without proxy mapping picks other rows
+    model = view.proxy_model
+    first, second, unselected = (model.index(row, 0).data(Qt.UserRole) for row in range(3))
 
     # get selected tasks
     selected_tasks = view.get_selected_items()
-    assert task1.item in selected_tasks
-    assert task3.item in selected_tasks
-    assert task2.item not in selected_tasks
+    assert first.item in selected_tasks
+    assert second.item in selected_tasks
+    assert unselected.item not in selected_tasks
 
     assert isinstance(task1.item.data(Qt.UserRole), TaskExecutable)

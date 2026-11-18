@@ -6,7 +6,6 @@ from typing import Dict, List, Iterator
 
 from tqm._core.task import TaskGroup, TaskExecutable
 from tqm._core.task_base import TaskBase
-from tqm._core.task_runner import TaskRunner, GroupRunner
 
 from .task import TaskUnit
 
@@ -84,11 +83,6 @@ class TasksQueue:
             ) from e
         return task
 
-    def main_to_deferred(self, task: TaskUnit) -> None:
-        """Transfer a task from the main queue to the deferred queue."""
-        self.remove_from_queue(task)
-        self.suspend(task)
-
     def promote_to_main(self, task: TaskUnit) -> None:
         """Transfer a task from the deferred queue to the main queue."""
         self.remove_from_deferred(task)
@@ -127,7 +121,7 @@ class TasksQueue:
             except self.DeferredTaskNotFound as e:
                 raise self.TaskNotFound from e
 
-    def __iter__(self) -> Iterator[TaskBase[TaskExecutable, TaskRunner] | TaskBase[TaskGroup, GroupRunner]]:
+    def __iter__(self) -> Iterator[TaskBase[TaskExecutable] | TaskBase[TaskGroup]]:
         return iter([*self.heap, *self.deferred.values()])
 
     def __contains__(self, task: TaskUnit) -> bool:

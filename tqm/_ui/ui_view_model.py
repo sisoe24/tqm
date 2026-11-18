@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Dict, List, Tuple, Union, Optional
-from functools import partial
+from pathlib import Path
+from functools import partial, lru_cache
 
+import shiboken2
 from PySide2.QtGui import (QIcon, QStandardItem, QContextMenuEvent,
                            QStandardItemModel)
-from PySide2.QtCore import Qt, Slot, Signal, QModelIndex, QSortFilterProxyModel
-from PySide2.QtWidgets import (QMenu, QAction, QWidget, QSplitter, QTreeView,
+from PySide2.QtCore import (Qt, Slot, Signal, QRegExp, QModelIndex,
+                            QItemSelectionModel, QSortFilterProxyModel)
+from PySide2.QtWidgets import (QMenu, QWidget, QSplitter, QTreeView,
                                QVBoxLayout)
 
 from .toolbar import TasksViewToolbar
@@ -20,6 +24,7 @@ from .context_menu import TaskFileMenu
 from .debug_widget import DebugWidget
 from .mixins.view_mixin import ViewStateMixing
 from .._core.task_actions import TaskAction, TaskActionVisibility
+from .._core.task_builder import TaskBuilder
 from .._core.task_executor import TaskExecutor
 from .progress_bar_delegate import ProgressBarDelegate
 from .mixins.multi_select_mixin import MultiSelectMixin
@@ -28,6 +33,12 @@ _TaskActionsT = Union[
     Tuple[TaskAction[TaskExecutable], ...],
     Tuple[TaskAction[TaskGroup], ...]
 ]
+
+
+@lru_cache(maxsize=None)
+def _icon(path: str) -> QIcon:
+    # Building a QIcon from a resource is slow; one per path keeps large adds fast.
+    return QIcon(path)
 
 
 class TreeModel(QStandardItemModel):
@@ -65,11 +76,6 @@ class TreeModel(QStandardItemModel):
         ]
 
     def _configure_group_item(self, task_group: TaskGroup) -> None:
-        if not task_group.tasks:
-            raise TaskGroupError(
-                f'Cannot add TaskGroup "{task_group.name}" without any tasks'
-            )
-
         task_group.progress_bar.maximum = len(task_group.tasks)
 
         group_item = task_group.item
@@ -78,16 +84,18 @@ class TreeModel(QStandardItemModel):
                 f'Expected TaskGroup "{task_group.name}" to have an associated group item, but none was found.'
             )
 
-        group_item.setIcon(QIcon(':/icons/dark/circle-parent'))
+        group_item.setIcon(_icon(':/icons/dark/circle-parent'))
         f = group_item.font()
         f.setBold(True)
         group_item.setFont(f)
 
         for task in task_group.tasks:
-            task.color = task_group.color
+            # A task keeps its own color; one left at the default takes the group's.
+            if task.color == TaskBuilder.DEFAULT_COLOR:
+                task.color = task_group.color
 
             task.item = TaskItem(task.name, foreground=task.color)
-            task.item.setIcon(QIcon(':/icons/dark/circle-line'))
+            task.item.setIcon(_icon(':/icons/dark/circle-line'))
             task.item.setData(task, Qt.UserRole)
 
             group_item.appendRow(self._create_task_row(task.item, task))
@@ -95,7 +103,7 @@ class TreeModel(QStandardItemModel):
     def add_task(self, task_unit: TaskUnit) -> TaskItem:
 
         task_unit.item = TaskItem(task_unit.name, foreground=task_unit.color)
-        task_unit.item.setIcon(QIcon(':/icons/dark/circle-filled'))
+        task_unit.item.setIcon(_icon(':/icons/dark/circle-filled'))
         task_unit.item.setData(task_unit, Qt.UserRole)
 
         if isinstance(task_unit, TaskGroup):
@@ -111,42 +119,73 @@ class TreeModel(QStandardItemModel):
         self.root_item = self.invisibleRootItem()
 
 
-class RecursiveFilterProxyModel(QSortFilterProxyModel):
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+class TaskFilterProxyModel(QSortFilterProxyModel):
+    """Filter on the text columns and sort names in natural order.
+
+    Qt's recursive filtering keeps the ancestors of a match; this class keeps its descendants.
+    """
+
+    def __init__(self, text_columns: Tuple[int, ...], parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._text_columns = text_columns
+        self.setRecursiveFilteringEnabled(True)
+
+    def set_search_text(self, text: str) -> None:
+        regexp = QRegExp(text, Qt.CaseInsensitive)
+        if not regexp.isValid():
+            regexp = QRegExp(text, Qt.CaseInsensitive, QRegExp.FixedString)
+        self.setFilterRegExp(regexp)
+
+    def _row_matches(self, source_row: int, source_parent: QModelIndex) -> bool:
+        model = self.sourceModel()
+        regexp = self.filterRegExp()
+        return any(
+            regexp.indexIn(str(model.index(source_row, column, source_parent).data() or '')) != -1
+            for column in self._text_columns
+        )
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-
-        if super().filterAcceptsRow(source_row, source_parent):
+        if self._row_matches(source_row, source_parent):
             return True
 
-        model = self.sourceModel()
-        source_index = model.index(source_row, 0, source_parent)
-
-        if source_index.isValid():
-            rows = model.rowCount(source_index)
-            for i in range(rows):
-                if self.filterAcceptsRow(i, source_index):
-                    return True
+        parent = source_parent
+        while parent.isValid():
+            if self._row_matches(parent.row(), parent.parent()):
+                return True
+            parent = parent.parent()
         return False
+
+    def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:
+        left_data, right_data = left.data(), right.data()
+        if isinstance(left_data, str) and isinstance(right_data, str):
+            return _natural_key(left_data) < _natural_key(right_data)
+        return super().lessThan(left, right)
+
+
+def _natural_key(text: str) -> List[Union[int, str]]:
+    # re.split with a group alternates text and digits, so positions always compare like with like.
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', text)]
 
 
 class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
     selected_task_retried = Signal(TaskExecutable)
     selected_task_removed = Signal()
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
-        super().__init__(self, self, parent)
+    def __init__(self, settings_path: Path, parent: Optional[QWidget] = None) -> None:
+        super().__init__(self, self, settings_path, parent)
         self.setObjectName('TqmTasksTreeView')
 
-        self.tasks_model = TreeModel()
+        self.tasks_model = TreeModel(self)
 
-        self.proxy_model = RecursiveFilterProxyModel()
-        self.proxy_model.setFilterKeyColumn(-1)
+        columns = self.tasks_model.columns
+        text_columns = (columns['Task'], columns['Wait for'], columns['Comment'])
+        self.proxy_model = TaskFilterProxyModel(text_columns, self)
         self.proxy_model.setSortCaseSensitivity(Qt.CaseInsensitive)
         self.proxy_model.setFilterCaseSensitivity(Qt.CaseInsensitive)
         self.proxy_model.setSourceModel(self.tasks_model)
         self.setModel(self.proxy_model)
+        # Expand rows as they appear, so adding or filtering keeps the groups the user collapsed.
+        self.proxy_model.rowsInserted.connect(self._expand_inserted)
 
         self._progress_delegate = ProgressBarDelegate(self.tasks_model.columns['Progress'], self)
         self.setItemDelegate(self._progress_delegate)
@@ -165,6 +204,11 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
 
         self.load_table_state()
         self.setSortingEnabled(True)
+
+    @Slot(QModelIndex, int, int)
+    def _expand_inserted(self, parent: QModelIndex, first: int, last: int) -> None:
+        for row in range(first, last + 1):
+            self.expand(self.proxy_model.index(row, 0, parent))
 
     def stop_animation(self) -> None:
         self._progress_delegate.cleanup()
@@ -194,15 +238,17 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
                 if action.name == '%file%':
                     # get the file assigned to the action return
                     user_file = action.action(task)
-                    menu.addMenu(TaskFileMenu(user_file, self))
+                    menu.addMenu(TaskFileMenu(user_file, menu))
                 else:
-                    act = QAction(action.name, self)
-                    act.triggered.connect(partial(action.action, task))
-                    menu.addAction(act)
+                    menu.addAction(action.name).triggered.connect(partial(action.action, task))
 
         item = self.indexAt(event.pos()).siblingAtColumn(0)
         if not item.isValid() or not item.data(Qt.UserRole):
             return
+
+        # Act on the clicked row: select it unless it is already part of the selection.
+        if not self.selectionModel().isRowSelected(item.row(), item.parent()):
+            self.selectionModel().select(item, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
 
         menu = QMenu(self)
 
@@ -216,18 +262,18 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
             add_actions(task.actions, TaskActionVisibility.ON_FAILED)
 
             if isinstance(task, TaskExecutable) and not task.parent:
-                retry_act = QAction('Retry', self)
-                retry_act.triggered.connect(lambda: self.selected_task_retried.emit(task))
-                menu.addAction(retry_act)
+                retry = menu.addAction('Retry')
+                retry.triggered.connect(lambda: self.selected_task_retried.emit(task))
 
         menu.addSeparator()
 
         if task.state.is_removable:
-            remove_task = QAction('Remove selected', self)
-            remove_task.triggered.connect(self.selected_task_removed.emit)
-            menu.addAction(remove_task)
+            menu.addAction('Remove selected').triggered.connect(self.selected_task_removed.emit)
 
-        menu.exec_(event.globalPos())
+        if any(not action.isSeparator() for action in menu.actions()):
+            menu.exec_(event.globalPos())
+        # Delete now, on the main thread: a parented menu would pile up on the view.
+        shiboken2.delete(menu)
 
 
 class TaskManagerView(QWidget):
@@ -239,16 +285,20 @@ class TaskManagerView(QWidget):
 
     """
 
-    def __init__(self, executor: TaskExecutor, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        executor: TaskExecutor,
+        settings_path: Path,
+        parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(parent)
 
-        self.tree_view = TaskTreeView()
+        self.tree_view = TaskTreeView(settings_path)
         self.tree_view.clicked.connect(self._on_toggle_debug)
 
         self.toolbar = TasksViewToolbar()
-        self.toolbar.search_bar.textChanged.connect(
-            self.tree_view.proxy_model.setFilterRegExp
-        )
+        self.toolbar.search_bar.textChanged.connect(self.tree_view.proxy_model.set_search_text)
+        self.toolbar.search_btn.toggled.connect(self._on_toggle_search)
 
         self._debug_widget = DebugWidget(executor)
 
@@ -269,14 +319,15 @@ class TaskManagerView(QWidget):
         layout.addWidget(splitter)
         self.setLayout(layout)
 
+    @Slot(bool)
+    def _on_toggle_search(self, shown: bool) -> None:
+        # Closing the bar clears the search, so no hidden filter stays on.
+        if not shown:
+            self.toolbar.search_bar.clear()
+
     @Slot(QModelIndex)
     def _on_toggle_debug(self, index: QModelIndex) -> None:
-        selected_item = self.tree_view.get_selected_items()
-        task = selected_item[0].data(Qt.UserRole)
-        self._debug_widget.populate(task)
-
-    def toggle_expand(self, state: bool) -> None:
-        self.tree_view.expandAll() if state else self.tree_view.collapseAll()
+        self._debug_widget.populate(index.siblingAtColumn(0).data(Qt.UserRole))
 
     def update_status(self, status: Dict[str, Any]) -> None:
         stringified_status = ' | '.join(f'{k}: {v}' for k, v in status.items())

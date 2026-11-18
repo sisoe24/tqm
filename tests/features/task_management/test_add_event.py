@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from typing import Callable
+from threading import Event
+
+from PySide2.QtCore import Qt
 from pytestqt.qtbot import QtBot
 
 from tqm import TQManager, TaskExecutable
+from tqm._core.task_options import ProgressMode
 
 from ...utils import (SafeList, raise_error, assert_task_failed,
                       assert_task_completed)
@@ -98,22 +103,30 @@ def test_add_event_without_label(qtbot: QtBot, app: TQManager):
     assert_task_completed(task)
 
 
-def test_add_event_with_progress(qtbot: QtBot, app: TQManager):
-    """Test that an event with progress tracking works."""
-
-    progress_values = SafeList[float]()
+def test_add_event_with_progress(qtbot: QtBot, app: TQManager, gate: Callable[[], Event]):
+    """Test that progress emitted by a running event reaches the model cell."""
+    release = gate()
 
     def track_progress(task: TaskExecutable):
-        for i in range(5):
-            task.emit_progress(i * 25)
-            progress_values.append(i * 25)
+        task.emit_progress(40)
+        release.wait()
 
     task = app.add_event(track_progress, show_progress=True, label='ProgressTask')
+    assert task.progress_bar.mode == ProgressMode.DETERMINATE
 
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    def progress_cell():
+        column = task.item.model().columns['Progress']
+        return task.item.index().siblingAtColumn(column).data(Qt.DisplayRole)
 
-    assert len(progress_values) == 5
-    assert progress_values[0] == 0
-    assert progress_values[-1] == 100
+    app.start_workers()
+    qtbot.wait_until(lambda: progress_cell() == 40)
+
+    # the event is still blocked: only the emitted value can have set the cell
+    assert task.state.is_running
+
+    release.set()
+    qtbot.wait_until(lambda: task.state.is_completed)
+
+    # a completed task fills its progress bar
+    assert progress_cell() == task.progress_bar.maximum
     assert_task_completed(task)

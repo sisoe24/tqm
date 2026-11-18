@@ -21,9 +21,12 @@ def linear_retry(attempts: int, delay_seconds: int) -> SimpleRetryPolicy:
 def conditional_retry(
     attempts: int,
     delay_strategy: DelayStrategy,
-    retry_if: Callable[..., bool],
+    retry_if: Callable[[Exception], bool],
 ) -> ConditionalRetryPolicy:
-    """Create conditional retry with custom delay strategy."""
+    """Create conditional retry with custom delay strategy.
+
+    `retry_if` gets the exception and returns True to retry.
+    """
     return ConditionalRetryPolicy(attempts, delay_strategy, retry_if)
 
 
@@ -43,5 +46,8 @@ def exceptions_retry(
     retry_on: Optional[List[Type[Exception]]] = None,
     never_retry_on: Optional[List[Type[Exception]]] = None
 ) -> ExceptionBasedRetryPolicy:
-    """Create a retry policy with exception based filtering."""
+    """Create a retry policy with exception based filtering.
+
+    Without `retry_on`, every exception not in `never_retry_on` is retried.
+    """
     return ExceptionBasedRetryPolicy(attempts, delay_strategy, retry_on, never_retry_on)

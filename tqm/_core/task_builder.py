@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import copy
 from typing import (Any, Set, Dict, List, Generic, TypeVar, Callable, Optional,
                     overload)
 
@@ -8,6 +10,7 @@ from PySide2.QtCore import Qt
 
 from .task import TaskUnit, TaskGroup, TaskExecutable
 from ..utils import RandomColor
+from ..exceptions import TaskGroupError
 from ..typings import RGBA, TASK_COLOR
 from .retry_policy import RetryPolicy, NoRetryPolicy, fixed_retry
 from .task_actions import TaskAction, TaskActionVisibility
@@ -25,10 +28,11 @@ Builder = TypeVar(
 class _TaskBuilderBase(Generic[Builder, TaskType]):
     """Base class for TaskBuilder and TaskGroupBuilder."""
     Actions = TaskActionVisibility
+    DEFAULT_COLOR = QColor(230, 230, 230, 255)
 
     def __init__(self, name: str):
         self.name = name
-        self.color = QColor(230, 230, 230, 255)
+        self.color = QColor(self.DEFAULT_COLOR)
         self.comment = ''
 
         self.parent: Optional[TaskUnit] = None
@@ -71,12 +75,16 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
     def with_retry_policy(self: Builder, policy: RetryPolicy) -> Builder:
         """Sets the retry policy for the task builder.
 
-        >>> from tqm.retry_policy import ConditionalRetryPolicy, LinearOffset
-        >>> my_policy = ConditionalRetryPolicy(max_attempts=5, LinearOffset(delay_seconds=5))
+        >>> from tqm import retry_policy
+        >>> my_policy = retry_policy.ConditionalRetryPolicy(
+        ...     5, retry_policy.LinearBackoff(5), lambda exception: isinstance(exception, IOError)
+        ... )
         >>> with_retry_policy(my_policy)
 
         TODO: Add documentation about custom policy.
         """
+        if not isinstance(policy, RetryPolicy):
+            raise TypeError(f'Expected a RetryPolicy, got {policy!r}')
         self.retry_policy = policy
         return self
 
@@ -104,11 +112,11 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
     ) -> Builder:
         """Predicate to be executed before the task is started.
 
-        >>> with_predicate(lambda _: os.path.exists('file.txt'), max_retries=2, retry_interval_ms=2000)
+        >>> with_predicate(lambda: os.path.exists('file.txt'), max_attempts=2, delay_ms=2000)
 
-        If the predicate returns False, the task will not be executed. If
-        `max_retries` is set, the task will be retried that many times every
-        `retry_interval_ms` milliseconds.
+        The condition takes no arguments. If it returns False, the task waits and the
+        condition is checked again up to `max_attempts` times, every `delay_ms`
+        milliseconds. If it raises, the task fails.
 
         """
         self.predicate_condition = condition
@@ -126,7 +134,7 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
 
         >>> with_action(
         ...    'Open File',
-        ...    lambda t: QDesktopServices.openUrl(f'file://{task.data["file"]}'),
+        ...    lambda task: QDesktopServices.openUrl(f'file://{task.data["file"]}'),
         ...    visibility=TaskActionVisibility.ON_COMPLETED
         ... )
         >>> with_action(
@@ -138,7 +146,7 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         An action is a context menu item that is displayed when the task is right-clicked.
         Can be called multiple times to add multiple actions.
 
-        Tip: If you need to open a file, use `with_file` instead.
+        Tip: If you need to open a file, use `with_file_action` instead.
 
         """
         self._actions.append(TaskAction[TaskType](label, execute, visibility))
@@ -185,15 +193,15 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         on_failed: Callable[[TaskType], Any],
         cleanup: bool = False
     ) -> Builder:
-        """Callback to be executed each time the task fails.
+        """Callback to be executed when the task fails for good, after its retries.
 
         Args:
             on_failed: Function to call when task fails. Receives the task as first argument.
-            cleanup: If True, callback fires only on the first failure.
-                    If False (default), callback fires on each failed attempt.
+            cleanup: If True, callback fires only on the first final failure.
+                    If False (default), it fires again after a manual retry fails.
 
         Examples:
-            >>> with_on_failed(lambda task: task.log(f'Attempt failed: {task.exception}'))
+            >>> with_on_failed(lambda task: task.log(f'Task failed: {task.exception}'))
             >>> with_on_failed(lambda task: send_alert(task), cleanup=True)  # Alert only once
 
         Note:
@@ -208,16 +216,16 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
         on_finish: Callable[[TaskType], Any],
         cleanup: bool = False
     ) -> Builder:
-        """Callback to be executed after each task attempt completes.
+        """Callback to be executed when the task finishes for good, after its retries.
 
         Args:
-            on_finish: Function to call when task attempt finishes. Receives the task as first argument.
-            cleanup: If True, callback fires only when task permanently finishes.
-                    If False (default), callback fires after each attempt (useful for cleanup).
+            on_finish: Function to call when task finishes. Receives the task as first argument.
+            cleanup: If True, callback fires only the first time the task finishes.
+                    If False (default), it fires again after a manual retry finishes.
 
         Examples:
             >>> with_on_finish(lambda task: cleanup_temp_files(task))
-            >>> with_on_finish(lambda task: log_final_state(task), cleanup=True)  # Log only at end
+            >>> with_on_finish(lambda task: log_final_state(task), cleanup=True)  # Log only once
 
         Note:
             The callback receives the task instance as its first argument.
@@ -309,7 +317,9 @@ class _TaskBuilderBase(Generic[Builder, TaskType]):
             self.color = color
 
         elif isinstance(color, (str, Qt.GlobalColor)):
-            user_color = QColor(color)
+            # Qt 5 does not parse 'rgb(...)' strings.
+            rgb = re.fullmatch(r'\s*rgba?\(([\d\s,]+)\)\s*', color) if isinstance(color, str) else None
+            user_color = QColor(*map(int, rgb.group(1).split(','))) if rgb else QColor(color)
             self.color = user_color if user_color.isValid() else self._random_color.generate()
 
         elif isinstance(color, tuple):
@@ -352,7 +362,7 @@ class TaskBuilder(_TaskBuilderBase['TaskBuilder', TaskExecutable]):
 
         NOTE:
             - The first argument is the task itself.
-            - The progress is emitted by the `task.update_progress` signal
+            - The event reports progress with `task.emit_progress(value)`
 
         """
         self.event = event
@@ -373,8 +383,9 @@ class TaskBuilder(_TaskBuilderBase['TaskBuilder', TaskExecutable]):
             comment=self.comment,
             parent=self.parent,
             color=self.color,
-            data=self.data,
-            retry_policy=self.retry_policy,
+            # Copies, so tasks built from one builder or policy do not share attempts or data.
+            data=dict(self.data),
+            retry_policy=copy.copy(self.retry_policy),
             progress_bar=ProgressBarOptions(
                 minimum=self.minimum,
                 maximum=self.maximum,
@@ -417,11 +428,15 @@ class TaskGroupBuilder(_TaskBuilderBase['TaskGroupBuilder', TaskGroup]):
         return self
 
     def build(self) -> TaskGroup:
+        if not isinstance(self.retry_policy, NoRetryPolicy):
+            raise TaskGroupError(f'Group {self.name} cannot retry: give its tasks a retry policy')
+
         group = TaskGroup(
             name=self.name,
             parent=self.parent,
             comment=self.comment,
             color=self.color,
+            data=dict(self.data),
             actions=tuple(self._actions),
             progress_bar=ProgressBarOptions(
                 maximum=len(self.tasks),

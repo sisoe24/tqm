@@ -4,33 +4,24 @@ from typing import Any, Set, Dict, Union, Callable, Optional
 from dataclasses import field, dataclass
 
 from ..utils import extract_fn_name
+from ..exceptions import TaskGroupError
 from .logger import LOGGER
 from .task_base import TaskBase
-from .task_runner import TaskRunner, GroupRunner
 
-TaskUnit = Union[
-    TaskBase['TaskExecutable', TaskRunner],
-    TaskBase['TaskGroup', GroupRunner]
-]
+TaskUnit = Union[TaskBase['TaskExecutable'], TaskBase['TaskGroup']]
 
 
 @dataclass
-class TaskExecutable(TaskBase['TaskExecutable', TaskRunner]):
-    execute: Callable[..., Any] = lambda: None
+class TaskExecutable(TaskBase['TaskExecutable']):
+    execute: Callable[..., Any] = lambda task: None
     group: Optional[TaskGroup] = None
-    runner: TaskRunner = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__(suffix='Task')
         LOGGER.debug('TaskExecutable created: %s', str(self))
-        self.runner = TaskRunner(self)
 
     def __hash__(self) -> int:
         return hash(self.id)
-
-    def reset(self, comment: str = '', reset_attempts: bool = False) -> None:
-        super().reset(comment, reset_attempts)
-        self.runner = TaskRunner(self)
 
     def delete(self, comment: str = '') -> None:
         if self.group:
@@ -38,7 +29,7 @@ class TaskExecutable(TaskBase['TaskExecutable', TaskRunner]):
         return super().delete(comment)
 
     def emit_progress(self, value: float) -> None:
-        self.runner.signals.task_progress_updated.emit(value)
+        self.signals.task_progress_updated.emit(self, value)
 
     def inspect(self) -> Dict[str, Any]:
         data = super().inspect()
@@ -48,23 +39,21 @@ class TaskExecutable(TaskBase['TaskExecutable', TaskRunner]):
 
 
 @dataclass
-class TaskGroup(TaskBase['TaskGroup', GroupRunner]):
+class TaskGroup(TaskBase['TaskGroup']):
     tasks: Set[TaskExecutable] = field(init=False, default_factory=set[TaskExecutable])
-    runner: GroupRunner = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__(suffix='Group')
         LOGGER.debug('Task Group Created: %s', str(self))
-        self.runner = GroupRunner(self)
 
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def reset(self, comment: str = '', reset_attempts: bool = False) -> None:
-        super().reset(comment, reset_attempts)
-        self.runner = GroupRunner(self)
-
     def add_tasks(self, *tasks: TaskExecutable) -> None:
+        # Members are registered when the group starts, so a later member would never run.
+        if self.state.is_running:
+            raise TaskGroupError(f'Cannot add tasks to running group {self.name}')
+
         for task in tasks:
             self.tasks.add(task)
             task.group = self
@@ -81,15 +70,15 @@ class TaskGroup(TaskBase['TaskGroup', GroupRunner]):
 
         Args:
             execute (Callable[..., Any]): The event to be executed. The first argument is the task itself.
-            progress (bool): If the task should show a progress.
+            show_progress (bool): If the task should show a progress.
             label (Optional[str], optional): The label of the task. If not provided,
                 a default label will be generated.
-            details (Optional[str], optional): Comment of the task. Defaults to ''.
+            comment (str, optional): Comment of the task. Defaults to ''.
 
         ```
         add_event(
            execute=lambda task: print(task.name),
-           progress=True,
+           show_progress=True,
            label='My task',
            comment='Comment of the task'
         )

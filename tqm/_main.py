@@ -8,13 +8,14 @@ from PySide2.QtCore import Qt
 from PySide2.QtWidgets import QWidget, QSplitter, QMainWindow, QMessageBox
 
 from ._core.task import TaskUnit, TaskGroup, TaskExecutable
-from ._core.logger import LOGGER, WidgetLogHandler, log_file_handler
+from ._core.logger import LOGGER, USER_LEVEL, remove_handlers, add_file_handler
 from ._ui.tab_logs import TasksLog
 from ._core.settings import get_qss_path, open_settings, get_config_path
 from ._ui.ui_controller import TaskManagerController, _TaskButtonsController
 from ._ui.ui_view_model import TaskManagerView
 from ._core.task_builder import TaskBuilder, TaskGroupBuilder
 from ._core.task_executor import TaskExecutor, _ExecutorCallbacks
+from .widgets.help_widget import show_help
 
 TaskGroupGenerator = Generator[TaskGroup, Any, None]
 
@@ -25,9 +26,9 @@ class TQManager(QMainWindow):
     This class is the main entry point for the TQManager. It provides a simple
     interface for adding tasks to a queue and executing them.
 
-    >>> widget = TQManager()
-    >>> with widget.begin_task_insert() as tasks:
-    ...    tasks.add_event(lambda t: None, label='Dummy Task', comment='Does nothing')
+    >>> widget = TQManager('my_app')
+    >>> with widget.create_group('Group') as group:
+    ...    group.add_event(lambda t: None, label='Dummy Task', comment='Does nothing')
     >>> widget.start_workers()
     """
 
@@ -44,27 +45,37 @@ class TQManager(QMainWindow):
         config_path = get_config_path(app_name)
         config_path.mkdir(exist_ok=True, parents=True)
 
-        self.setStyleSheet(get_qss_path(config_path).read_text())
+        try:
+            self.setStyleSheet(get_qss_path(config_path).read_text())
+        except OSError as e:
+            print('[tqm error]: Cannot read the style sheet.', e)
 
-        with open_settings() as s:
+        settings_path = config_path / 'settings.json'
+        with open_settings(json_file_path=settings_path) as s:
             settings = s
 
         # logs
-        self._logs = TasksLog()
-        LOGGER.widget = WidgetLogHandler(self._logs, settings.enable_debug)
+        self._logs = TasksLog(settings_path, settings.wrap_lines, settings.enable_debug)
+        handlers = (self._logs.handler, add_file_handler(config_path))
+        LOGGER.addHandler(self._logs.handler)
+        self.destroyed.connect(lambda: remove_handlers(*handlers))
         LOGGER.info('Initializing TQManager')
-        LOGGER.addHandler(log_file_handler(config_path))
 
         # core logic
-        self.executor = TaskExecutor(settings.max_workers)
+        self.executor = TaskExecutor(settings.max_workers, parent=self)
+        signals = self.executor._runner_signals
+        self._logs.handler.addFilter(lambda r: getattr(r, 'tqm_signals', None) in (None, signals))
 
         # widgets logic
-        self._view = TaskManagerView(self.executor, parent)
+        self._view = TaskManagerView(self.executor, settings_path, parent)
+        self._view.toolbar.table_options.help.triggered.connect(
+            lambda: show_help(config_path=str(config_path))
+        )
         self.executor.callbacks.system_idle.connect(self._view.tree_view.stop_animation)
 
         self.executor.callbacks.status_updated.connect(self._view.update_status)
 
-        self._controller = TaskManagerController(self._view, self.executor, settings)
+        self._controller = TaskManagerController(self._view, self.executor, settings_path, self)
         self._controller.ops.max_workers_updated.connect(self.executor.set_max_workers)
 
         splitter = QSplitter(Qt.Vertical)
@@ -99,19 +110,31 @@ class TQManager(QMainWindow):
         for task in tasks:
             self.executor.remove_task(task)
 
+    def log(self, text: str) -> None:
+        """Write a message to this manager's log panel and log file.
+
+        ```
+        task_manager.log('Polling started...')
+        ```
+        """
+        LOGGER.log(USER_LEVEL, text, extra={'tqm_signals': self.executor._runner_signals})
+
     def add_tasks(self, *tasks: TaskUnit) -> None:
         """Add a group of tasks to the queue.
 
         ```
         task = TaskBuilder().build()
-        group = TaskGroupBuilder().build()
-        task_manager.add(group, task)
+        group = TaskGroupBuilder().with_tasks(TaskBuilder().build()).build()
+        task_manager.add_tasks(group, task)
         ```
+
+        Raises:
+            TaskError: If called from another thread than the one that created the manager,
+                or if a task was removed before.
 
         """
         for task in tasks:
             self.executor.add_task(task)
-            self.callbacks.task_added.emit(task)
 
     def add_event(
         self,
@@ -129,12 +152,12 @@ class TQManager(QMainWindow):
             show_progress (bool): If the task should show a progress.
             label (Optional[str], optional): The label of the task. If not provided,
                 a default label will be generated.
-            details (Optional[str], optional): Comment of the task. Defaults to ''.
+            comment (str, optional): Comment of the task. Defaults to ''.
 
         ```
         add_event(
            execute=lambda task: print(task.name),
-           progress=True,
+           show_progress=True,
            label='My task',
            comment='Comment of the task'
         )
@@ -164,14 +187,24 @@ class TQManager(QMainWindow):
         self.add_tasks(group)
 
     def shutdown(self) -> None:
-        """Shutdown the workers."""
-        if QMessageBox.question(
-            None,
+        """Ask the user, then shut down without waiting.
+
+        The question does not block: this returns at once, and the shutdown runs on Yes.
+        With no task running or queued there is nothing to lose, so it does not ask.
+        Tasks that have not started end deleted. Running tasks finish without retries.
+        """
+        if self.executor.status_tracker.is_idle():
+            self.executor.shutdown()
+            return
+
+        dialog = QMessageBox(
+            QMessageBox.Question,
             'Shutdown',
             'Are you sure you want to shutdown the workers? '
             'Note: In-progress tasks will not be terminated.',
-            QMessageBox.Yes | QMessageBox.No
-        ) != QMessageBox.Yes:
-            return
-
-        self.executor.shutdown()
+            QMessageBox.Yes | QMessageBox.No,
+            self
+        )
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        dialog.button(QMessageBox.Yes).clicked.connect(self.executor.shutdown)
+        dialog.open()

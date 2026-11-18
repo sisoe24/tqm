@@ -70,16 +70,18 @@ class ProgressBarRenderer:
     @staticmethod
     def handle_determinate_progress(
         pbar_options: QStyleOptionProgressBar,
-        progress: int,
+        progress: float,
         task: TaskUnit
     ) -> None:
         """Configure progress bar options for determinate progress"""
-        pbar_options.progress = progress
+        pbar_options.progress = int(progress)
 
         if isinstance(task, TaskGroup):
             text = f"{progress}/{len(task.tasks)}"
         else:
-            text = f"{progress}%"
+            options = task.progress_bar
+            span = (options.maximum - options.minimum) or 1
+            text = f"{round((progress - options.minimum) * 100 / span)}%"
 
         pbar_options.text = text
 

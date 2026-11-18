@@ -27,8 +27,7 @@ def test_logger(qtbot: QtBot):
     console = Console()
     handler = logger.WidgetLogHandler(console)
 
-    log.widget = handler
-    assert log.widget == handler
+    log.addHandler(handler)
 
     msg = 'This is a message'
     log.warning(msg)

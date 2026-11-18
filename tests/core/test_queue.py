@@ -38,7 +38,7 @@ def test_queue_multiple():
         TaskExecutable(execute=lambda: None, name='ghi'),
     ]
 
-    for t in tasks:
+    for t in reversed(tasks):
         q.enqueue(t)
 
     assert not q.is_empty()
@@ -55,6 +55,18 @@ def test_queue_multiple():
     assert t == tasks[2]
 
     assert q.is_empty()
+
+
+def test_heap_order_after_removal():
+    q = queue.TasksQueue()
+    tasks = [TaskExecutable(execute=lambda: None, name=str(i)) for i in range(7)]
+
+    for i in (0, 1, 3, 4, 2, 5, 6):
+        q.enqueue(tasks[i])
+
+    q.remove_from_queue(tasks[1])
+
+    assert [q.dequeue().name for _ in range(6)] == ['0', '2', '3', '4', '5', '6']
 
 
 def test_defer_task():
@@ -92,7 +104,7 @@ def test_deferred_to_main():
     assert q.is_empty()
 
 
-def test_main_to_deferred():
+def test_queue_to_deferred():
     q = queue.TasksQueue()
     task = TaskExecutable(execute=lambda: None, name='abc')
 
@@ -104,7 +116,8 @@ def test_main_to_deferred():
 
     assert task.id not in q.deferred
 
-    q.main_to_deferred(task)
+    q.remove_from_queue(task)
+    q.suspend(task)
 
     assert q.is_empty()
     assert q.size() == 0

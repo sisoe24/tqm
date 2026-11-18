@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sysconfig
 from typing import Any, Dict, Optional
 from platform import python_version
@@ -77,10 +76,10 @@ def about() -> Dict[str, str]:
     }
 
 
-def show_help(**kwargs: Any) -> None:
+def show_help(config_path: str = '', **kwargs: Any) -> None:
     return HelpWidget(
         git_repo='https://github.com/sisoe24/_TODO_',
-        config_path=os.environ['TQM_CONFIG_PATH'],
+        config_path=config_path,
         about=about(),
         extra=kwargs
     ).show()

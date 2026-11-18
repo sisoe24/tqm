@@ -37,8 +37,8 @@ def test_basic_group_creation(qtbot: QtBot, app: TQManager):
     app.add_tasks(group)
 
     # Start workers and wait for completion
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_completed or group.state.is_failed)
 
     # Verify both tasks were executed
     assert len(execution_order) == 2
@@ -68,8 +68,8 @@ def test_group_with_event_tasks(qtbot: QtBot, app: TQManager):
         group.add_event(lambda t: execution_order.append(t.name), label='GroupTask3')
 
     # Start workers and wait
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_completed or group.state.is_failed)
 
     # Verify all tasks were executed
     assert len(execution_order) == 3
@@ -81,52 +81,44 @@ def test_group_with_event_tasks(qtbot: QtBot, app: TQManager):
     assert_task_completed(group)
 
 
-def test_nested_groups(qtbot: QtBot, app: TQManager):
-    """Test nested task groups hierarchy."""
+def test_group_waits_for_group(qtbot: QtBot, app: TQManager):
+    """Test that a group waiting for another group runs after it."""
     execution_order = SafeList[str]()
 
-    # Create parent group
-    parent_group = TaskGroupBuilder('ParentGroup') .build()
+    first_group = TaskGroupBuilder('FirstGroup').build()
 
-    # Create child group
-    child_group = (
-        TaskGroupBuilder('ChildGroup')
-        .with_wait_for(parent_group)  # Make child wait for parent
+    second_group = (
+        TaskGroupBuilder('SecondGroup')
+        .with_wait_for(first_group)
         .build()
     )
 
-    # Add tasks to parent group
     task1 = (
-        TaskBuilder('ParentTask')
+        TaskBuilder('FirstTask')
         .with_event(lambda t: execution_order.append(t.name))
         .build()
     )
-    parent_group.add_tasks(task1)
+    first_group.add_tasks(task1)
 
-    # Add tasks to child group
     task2 = (
-        TaskBuilder('ChildTask')
+        TaskBuilder('SecondTask')
         .with_event(lambda t: execution_order.append(t.name))
         .build()
     )
-    child_group.add_tasks(task2)
+    second_group.add_tasks(task2)
 
-    # Add both groups to the manager
-    app.add_tasks(parent_group)
-    app.add_tasks(child_group)
+    app.add_tasks(first_group)
+    app.add_tasks(second_group)
 
-    # Start workers and wait
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: second_group.state.is_completed or second_group.state.is_failed)
 
-    # Verify execution order - parent group tasks should run before child group
-    assert len(execution_order) == 2
-    assert execution_order[0] == 'ParentTask'
-    assert execution_order[1] == 'ChildTask'
+    # Verify execution order - first group tasks should run before second group
+    assert execution_order.to_list() == ['FirstTask', 'SecondTask']
 
     # Verify both groups completed
-    assert_task_completed(parent_group)
-    assert_task_completed(child_group, ['inactive', 'waiting',
+    assert_task_completed(first_group)
+    assert_task_completed(second_group, ['inactive', 'waiting',
                           'blocked', 'waiting', 'running', 'completed'])
 
 
@@ -166,8 +158,8 @@ def test_group_partial_failure(qtbot: QtBot, app: TQManager):
     app.add_tasks(group)
 
     # Start workers and wait
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_completed or group.state.is_failed)
 
     # Verify successful tasks executed
     assert len(execution_order) == 2
@@ -221,8 +213,8 @@ def test_group_callbacks(qtbot: QtBot, app: TQManager):
     app.add_tasks(group)
 
     # Start workers and wait
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_completed or group.state.is_failed)
 
     # Verify callback sequence
     assert 'group_start' in callback_sequence
@@ -267,13 +259,12 @@ def test_group_progress_tracking(qtbot: QtBot, app: TQManager):
     app.add_tasks(group)
 
     # Start workers and wait
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_completed or group.state.is_failed)
 
     assert group.item
 
-    # XXX: this can fail if we change the columns order
-    progress_column_index = 1
+    progress_column_index = group.item.model().columns['Progress']
 
     progress_column_item = group.item.index().siblingAtColumn(progress_column_index)
     assert progress_column_item.data(Qt.DisplayRole) == 2  # 2 completed tasks
@@ -314,8 +305,8 @@ def test_group_with_retry(qtbot: QtBot, app: TQManager):
     app.add_tasks(group)
 
     # Start workers and wait
-    with qtbot.wait_signal(app.executor.callbacks.system_idle):
-        app.start_workers()
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_completed or group.state.is_failed)
 
     # Verify retry behavior
     assert execution_order.to_list() == ['RegularTask']  # Only the regular task ran normally

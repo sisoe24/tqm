@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Tuple, Callable, Optional
+from typing import Any, Dict, List, Tuple, Callable, Optional, FrozenSet
 from datetime import datetime
 from dataclasses import field, dataclass
 
 from PySide2.QtGui import QColor
+
+from ..exceptions import TaskError
 
 
 class TaskStateEnum(str, Enum):
@@ -56,6 +58,19 @@ def format_duration(seconds: float) -> str:
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     return f"+{hours}h {minutes}m"
+
+
+_S = TaskStateEnum
+ALLOWED_TRANSITIONS: Dict[TaskStateEnum, FrozenSet[TaskStateEnum]] = {
+    _S.INACTIVE: frozenset({_S.WAITING, _S.DELETED}),
+    _S.WAITING: frozenset({_S.RUNNING, _S.BLOCKED, _S.FAILED, _S.DELETED}),
+    _S.BLOCKED: frozenset({_S.WAITING, _S.RUNNING, _S.RETRYING, _S.FAILED, _S.DELETED}),
+    _S.RETRYING: frozenset({_S.INACTIVE, _S.RUNNING, _S.BLOCKED, _S.FAILED, _S.DELETED}),
+    _S.RUNNING: frozenset({_S.COMPLETED, _S.FAILED, _S.RETRYING}),
+    _S.COMPLETED: frozenset({_S.INACTIVE, _S.DELETED}),
+    _S.FAILED: frozenset({_S.INACTIVE, _S.DELETED}),
+    _S.DELETED: frozenset(),
+}
 
 
 @dataclass
@@ -123,6 +138,9 @@ class TaskState:
 
     def _set_state(self, state: TaskStateEnum, comment: str = '') -> None:
         previous_state = self.current
+        if state != previous_state and state not in ALLOWED_TRANSITIONS[previous_state]:
+            raise TaskError(f'Illegal state change: {previous_state.value} to {state.value}')
+
         self.current = state
         history = StateHistory(self.current.value, comment)
         self.history = self.history + (history,)
@@ -199,14 +217,12 @@ class TaskState:
         return self.current == TaskStateEnum.INACTIVE
 
     @property
-    def is_active(self) -> bool:
-        return any([
-            self.is_running, self.is_retrying, self.is_blocked,
-        ])
+    def is_retryable(self) -> bool:
+        return self.is_failed or self.is_completed
 
     @property
     def is_removable(self) -> bool:
         return any([
             self.is_waiting, self.is_deleted, self.is_inactive,
-            self.is_completed, self.is_failed
+            self.is_completed, self.is_failed, self.is_blocked, self.is_retrying
         ])

@@ -10,7 +10,7 @@ class TqmError(Exception):
 def create_exception(name: str, base: Type[TqmError] = TqmError) -> type[TqmError]:
     """Factory function to create new exception classes."""
     return type(name, (base,), {
-        '__init__': lambda self, message: super(base, self).__init__(message)
+        '__init__': lambda self, message='': super(base, self).__init__(message)
     })
 
 

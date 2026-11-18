@@ -7,7 +7,7 @@ from PySide2.QtCore import Qt, Slot, Signal
 from PySide2.QtWidgets import (QMenu, QLabel, QAction, QWidget, QLineEdit,
                                QHBoxLayout, QToolButton)
 
-from ..widgets import ToolButton, show_help
+from ..widgets import ToolButton
 
 
 class ClearTasksMenu(ToolButton):
@@ -60,7 +60,6 @@ class TableOptions(ToolButton):
         self.set_max_workers = QAction('Set Max Workers', self)
 
         self.help = QAction('Help', self)
-        self.help.triggered.connect(show_help)
 
         menu = QMenu(self)
         menu.addAction(self.set_max_workers)

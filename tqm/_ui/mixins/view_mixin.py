@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict
+from pathlib import Path
 from functools import partial
 
+import shiboken2
 from PySide2.QtCore import Qt, QPoint, QTimer, QByteArray
 from PySide2.QtWidgets import QMenu, QAction
 
@@ -31,29 +33,33 @@ class ViewStateMixing:
     def __init__(
         self,
         view: TaskTreeView,
+        settings_path: Path,
         *args: Any, **kwargs: Any
     ) -> None:
         super().__init__(*args, **kwargs)
 
         self.__view = view
+        self.__settings_path = settings_path
 
         self.__header = self.__view.header()
         self.__parent = 'tasks'
 
+        self.__header.setSortIndicator(0, Qt.AscendingOrder)
         self.__initial_state = self.__header.saveState()
         self.__columns: Dict[str, int] = {}
 
-        self.__timer = QTimer()
+        self.__timer = QTimer(view)
         self.__timer.setInterval(2000)
         self.__timer.timeout.connect(self._save_table_state)
         self.__timer.setSingleShot(True)
 
         self.__header.sectionMoved.connect(self._activate_timer)
         self.__header.sectionResized.connect(self._activate_timer)
+        self.__header.sortIndicatorChanged.connect(self._activate_timer)
         self.__header.setContextMenuPolicy(Qt.CustomContextMenu)
         self.__header.customContextMenuRequested.connect(self._on_header_menu)
 
-        with open_settings(mode='w') as settings:
+        with open_settings(mode='w', json_file_path=self.__settings_path) as settings:
             if self.__parent not in settings.view:
                 settings.view[self.__parent] = {
                     'state': '',
@@ -88,7 +94,7 @@ class ViewStateMixing:
             None
 
         """
-        with open_settings() as s:
+        with open_settings(json_file_path=self.__settings_path) as s:
             settings = s
 
         current_state = settings.view[self.__parent]['state']
@@ -121,7 +127,7 @@ class ViewStateMixing:
             None
 
         """
-        with open_settings(mode='w') as settings:
+        with open_settings(mode='w', json_file_path=self.__settings_path) as settings:
             settings.view[self.__parent]['state'] = (
                 self.__header.saveState().toBase64().data().decode()
             )
@@ -140,7 +146,7 @@ class ViewStateMixing:
             None
 
         """
-        with open_settings(mode='w') as settings:
+        with open_settings(mode='w', json_file_path=self.__settings_path) as settings:
             settings.view[self.__parent]['columns'][column_name] = state
             self.__view.setColumnHidden(self.get_columns()[column_name], not state)
 
@@ -162,12 +168,14 @@ class ViewStateMixing:
 
         for col, i in self.get_columns().items():
 
-            act = QAction(col, self.__view, checkable=True)
+            act = QAction(col, menu, checkable=True)
             act.setChecked(not self.__view.isColumnHidden(i))
             act.toggled.connect(partial(self._update_columns, col))
             menu.addAction(act)
 
         menu.exec_(self.__view.mapToGlobal(pos))
+        # Delete now, on the main thread: a parented menu would pile up on the view.
+        shiboken2.delete(menu)
 
     def reset_table_state(self) -> None:
         """
@@ -177,6 +185,6 @@ class ViewStateMixing:
         to the initial state.
 
         """
-        with open_settings(mode='w') as settings:
+        with open_settings(mode='w', json_file_path=self.__settings_path) as settings:
             settings.view.update({self.__parent: {'state': '', 'columns': {}}})
         self.load_table_state()
