@@ -77,6 +77,9 @@ class TQManager(QMainWindow):
 
         self._controller = TaskManagerController(self._view, self.executor, settings_path, self)
         self._controller.ops.max_workers_updated.connect(self.executor.set_max_workers)
+        self._view.tree_view.selectionModel().selectionChanged.connect(
+            lambda: self._logs.show_tasks(self._controller.get_selected_tasks())
+        )
 
         splitter = QSplitter(Qt.Vertical)
         splitter.addWidget(self._view)

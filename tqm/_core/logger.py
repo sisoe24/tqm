@@ -23,10 +23,10 @@ LOG_FILE_FORMAT = logging.Formatter(' | '.join([
     '%(message)s'
 ]), '%Y-%m-%d %H:%M:%S')
 
+# No thread column: the panel colors lines by task, and the file log keeps the threads.
 LOG_WIDGET_FORMAT = logging.Formatter(' | '.join([
     '%(asctime)s',
     '%(levelname)-8s',
-    '%(threadName)-10s ID:%(thread)-15d',
     '%(message)s'
 ]), '%H:%M:%S')
 
@@ -58,7 +58,7 @@ class WidgetLogHandler(logging.Handler):
         self._signal.log_message.emit(
             self.format(record),
             record.levelname.upper(),
-            str(record.thread)
+            getattr(record, 'tqm_task', '')
         )
 
 
@@ -106,7 +106,7 @@ def _console_handler() -> logging.StreamHandler[TextIO]:
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(logging.DEBUG)
     handler.set_name('console_handler')
-    handler.setFormatter(LOG_WIDGET_FORMAT)
+    handler.setFormatter(LOG_FILE_FORMAT)
     return handler
 
 

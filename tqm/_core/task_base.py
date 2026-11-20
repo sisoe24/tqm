@@ -93,7 +93,8 @@ class TaskBase(Generic[T]):
         """Log a message with the task name as prefix."""
         # The tag lets each window show only the logs of its own tasks.
         tag = getattr(self, 'signals', None)
-        LOGGER.log(USER_LEVEL, f'{self.name}: {text}', extra={'tqm_signals': tag})
+        extra = {'tqm_signals': tag, 'tqm_task': str(self.id)}
+        LOGGER.log(USER_LEVEL, f'{self.name}: {text}', extra=extra)
 
     def delete(self, comment: str = '') -> None:
         """Mark the task as deleted and clean up resources."""

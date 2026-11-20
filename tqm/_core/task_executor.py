@@ -267,7 +267,7 @@ class TaskExecutor(QObject):
             return
 
         if event == PredicateEventType.SUCCESS:
-            LOGGER.info(f'{task.name} predicate passed')
+            LOGGER.info(f'{task.name} predicate passed', extra={'tqm_task': str(task.id)})
             self.queue.promote_to_main(task)
             self.start_workers()
 
@@ -278,7 +278,8 @@ class TaskExecutor(QObject):
             task.state.set_retrying(f'Attempts left: {task.predicate.retry_left}')
             LOGGER.info(
                 f'{task.name} retrying in {task.predicate.retry_interval}ms. '
-                f'Retries left: {task.predicate.retry_left}'
+                f'Retries left: {task.predicate.retry_left}',
+                extra={'tqm_task': str(task.id)}
             )
 
     def _predicate_passes(self, task: TaskUnit) -> bool:
@@ -296,7 +297,7 @@ class TaskExecutor(QObject):
         if passed:
             return True
 
-        LOGGER.info(f'{task.name} predicate failed')
+        LOGGER.info(f'{task.name} predicate failed', extra={'tqm_task': str(task.id)})
         task.state.set_blocked('Predicate failed')
         self.queue.suspend(task)
         predicate.evaluate(partial(self._on_predicate_event, task))
@@ -420,7 +421,7 @@ class TaskExecutor(QObject):
 
     def _fail_task(self, task: TaskUnit, exception: Exception) -> None:
         """Fail a task for good, and every child still waiting for it."""
-        LOGGER.error(f'{task.name} failed: {exception}')
+        LOGGER.error(f'{task.name} failed: {exception}', extra={'tqm_task': str(task.id)})
 
         with contextlib.suppress(TaskNotFoundError):
             self.queue.remove_task(task)
@@ -441,7 +442,7 @@ class TaskExecutor(QObject):
     @Slot(object)
     def _on_task_completed(self, task: TaskUnit, *, autostart: bool = True) -> None:
         task.state.set_completed()
-        LOGGER.info(f'{task.name} completed')
+        LOGGER.info(f'{task.name} completed', extra={'tqm_task': str(task.id)})
 
         task.callbacks.execute_on_completed(task)
         self._on_task_finished(task)
@@ -503,7 +504,7 @@ class TaskExecutor(QObject):
         else:
             task.state.register_state_change_callback(self.status_tracker.update_group_status)
 
-        LOGGER.info('Adding task to queue: %s', task.name)
+        LOGGER.info('Adding task to queue: %s', task.name, extra={'tqm_task': str(task.id)})
 
         self.registry.add(task)
 
@@ -553,7 +554,7 @@ class TaskExecutor(QObject):
             return
 
         if parent and not parent.state.is_completed:
-            LOGGER.info(f'{task.name} waiting for {parent.name}')
+            LOGGER.info(f'{task.name} waiting for {parent.name}', extra={'tqm_task': str(task.id)})
             task.state.set_blocked(f'Waiting for parent: {parent.name}')
             self.queue.suspend(task)
             return
