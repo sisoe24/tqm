@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Selecting tasks in the tree filters the log panel to their lines; groups include their children.
+- A click on empty space in the tree clears the selection, so the log panel shows every task again.
 - A "Last message" column shows the latest `task.log` line of each task.
 - `callbacks.task_logged(task, text)` signal.
 

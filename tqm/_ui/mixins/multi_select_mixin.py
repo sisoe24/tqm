@@ -39,6 +39,11 @@ class MultiSelectMixin:
             and self.view.selectionMode() == QAbstractItemView.SingleSelection
         ):
             return
+
+        # A click on empty space clears the selection, so the log panel shows every task again.
+        if event.button() == Qt.LeftButton and not self.view.indexAt(event.pos()).isValid():
+            self.view.clearSelection()
+
         super().mousePressEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:

@@ -267,6 +267,15 @@ def test_click_that_empties_the_selection_raises_nothing(qtbot: QtBot, app: TQMa
     assert not errors
 
 
+def test_click_on_empty_space_clears_the_selection(app: TQManager, view: TaskTreeView):
+    add_rows(app, 'Aaa', 'Bbb')
+    click(view, 'Aaa')
+
+    QTest.mouseClick(view.viewport(), Qt.LeftButton, Qt.NoModifier, view.viewport().rect().bottomLeft())
+
+    assert selected(view) == []
+
+
 def test_debug_panel_shows_the_clicked_task(app: TQManager, view: TaskTreeView):
     add_rows(app, 'Aaa', 'Bbb')
     view.setSelectionMode(view.MultiSelection)
