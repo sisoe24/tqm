@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Selecting tasks in the tree filters the log panel to their lines; groups include their children.
+- A "Last message" column shows the latest `task.log` line of each task.
+- `callbacks.task_logged(task, text)` signal.
+
+### Changed
+
+- Log panel lines are colored by task, not by thread, and no longer show the thread column.
+
 ## v0.3.0
 
 ### Added

@@ -33,6 +33,7 @@ class _ExecutorCallbacks(QObject):
     task_removed = Signal(object)
     task_finished = Signal(object)
     task_progress_updated = Signal(object, float)
+    task_logged = Signal(object, str)
 
     runner_started = Signal(object)
     runner_completed = Signal(object)
@@ -236,6 +237,7 @@ class TaskExecutor(QObject):
         self._runner_signals.runner_failed.connect(self._on_task_failed, Qt.QueuedConnection)
         self._runner_signals.runner_completed.connect(self._on_task_completed, Qt.QueuedConnection)
         self._runner_signals.task_progress_updated.connect(self.callbacks.task_progress_updated)
+        self._runner_signals.task_logged.connect(self.callbacks.task_logged)
 
         self.registry: Set[TaskUnit] = set()
         # Tasks requeued by their retry policy: their next start is not a new run.

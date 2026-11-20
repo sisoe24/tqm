@@ -10,7 +10,7 @@ from PySide2.QtWidgets import QPlainTextEdit
 from tqm import TQManager, TaskBuilder, TaskGroupBuilder
 from tqm._ui.tab_logs import RECORDS_PER_TASK, TasksLog
 
-from .test_ui_controller import find_row
+from .test_ui_controller import find_row, cell_data
 
 
 def line(text: str) -> str:
@@ -109,3 +109,15 @@ def test_tree_selection_filters_the_log(qtbot: QtBot, app: TQManager):
 
     assert 'from-a' in log.toPlainText()
     assert 'from-b' not in log.toPlainText()
+
+
+def test_last_message_column_shows_the_latest_task_log(qtbot: QtBot, app: TQManager):
+    task = TaskBuilder('A').with_event(lambda t: (t.log('step one'), t.log('step two\ndetails'))).build()
+    child = TaskBuilder('Child').with_event(lambda t: t.log('child step')).build()
+    app.add_tasks(task, TaskGroupBuilder('G').with_tasks(child).build())
+    view = app._view.tree_view
+
+    app.start_workers()
+
+    qtbot.wait_until(lambda: cell_data(view, 'A', 'Last message') == 'step two')
+    qtbot.wait_until(lambda: cell_data(view, 'Child', 'Last message') == 'child step')

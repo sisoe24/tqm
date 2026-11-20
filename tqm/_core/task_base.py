@@ -95,6 +95,8 @@ class TaskBase(Generic[T]):
         tag = getattr(self, 'signals', None)
         extra = {'tqm_signals': tag, 'tqm_task': str(self.id)}
         LOGGER.log(USER_LEVEL, f'{self.name}: {text}', extra=extra)
+        if tag:
+            tag.task_logged.emit(self, text)
 
     def delete(self, comment: str = '') -> None:
         """Mark the task as deleted and clean up resources."""

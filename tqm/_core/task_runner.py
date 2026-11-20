@@ -21,6 +21,7 @@ class RunnerSignals(QObject):
 
     # progress is used by the user if needed
     task_progress_updated = Signal(object, float)
+    task_logged = Signal(object, str)
 
 
 class TaskRunner(QRunnable):

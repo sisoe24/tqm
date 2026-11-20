@@ -141,6 +141,9 @@ class TaskManagerController(QObject):
         executor.callbacks.runner_started.connect(self._on_task_started)
         executor.callbacks.task_removed.connect(self.remove_task)
         executor.callbacks.task_progress_updated.connect(self._on_task_update_progress)
+        executor.callbacks.task_logged.connect(
+            lambda task, text: self._update_item_data(task, 'Last message', text.partition('\n')[0])
+        )
 
         self.ops = _TaskButtonsController(self.view, executor, self, settings_path, self)
 
