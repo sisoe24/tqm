@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, List, Callable, Optional, Generator
-from pathlib import Path
+from typing import Any, Callable, Optional, Generator
 from contextlib import contextmanager
 
-from PySide2.QtCore import Qt, QTimer
-from PySide2.QtWidgets import QWidget, QSplitter, QMainWindow, QMessageBox
+from PySide2.QtCore import Qt
+from PySide2.QtWidgets import QWidget, QMainWindow, QMessageBox
 
 from ._core.task import TaskUnit, TaskGroup, TaskExecutable
 from ._core.logger import LOGGER, USER_LEVEL, remove_handlers, add_file_handler
 from ._ui.tab_logs import TasksLog
-from ._core.settings import Settings, get_qss_path, open_settings, get_config_path
+from ._ui.log_splitter import LogSplitter
+from ._core.settings import get_qss_path, open_settings, get_config_path
 from ._ui.ui_controller import TaskManagerController, _TaskButtonsController
 from ._ui.ui_view_model import TaskManagerView
 from ._core.task_builder import TaskBuilder, TaskGroupBuilder
@@ -81,27 +81,13 @@ class TQManager(QMainWindow):
             lambda: self._logs.show_tasks(self._controller.get_selected_tasks())
         )
 
-        splitter = QSplitter(Qt.Vertical)
-        splitter.addWidget(self._view)
-        splitter.addWidget(self._logs)
-
-        sizes = settings.splitter_sizes
-        valid = len(sizes) == 2 and all(isinstance(s, int) and s >= 0 for s in sizes) and sum(sizes) > 0
-        splitter.setSizes(sizes if valid else Settings().splitter_sizes)
-
-        # Save once the drag stops, not on every move.
-        save_sizes = QTimer(splitter)
-        save_sizes.setSingleShot(True)
-        save_sizes.setInterval(1000)
-        save_sizes.timeout.connect(lambda: self._save_splitter_sizes(settings_path, splitter.sizes()))
-        splitter.splitterMoved.connect(lambda *_: save_sizes.start())
+        splitter = LogSplitter(self._view, self._logs, settings_path)
+        show_log = self._view.toolbar.view_menu.show_log
+        show_log.setChecked(splitter.is_log_shown())
+        show_log.toggled.connect(splitter.show_log)
+        splitter.log_shown.connect(show_log.setChecked)
 
         self.setCentralWidget(splitter)
-
-    @staticmethod
-    def _save_splitter_sizes(settings_path: Path, sizes: List[int]) -> None:
-        with open_settings(mode='w', json_file_path=settings_path) as s:
-            s.splitter_sizes = sizes
 
     @property
     def callbacks(self) -> _ExecutorCallbacks:

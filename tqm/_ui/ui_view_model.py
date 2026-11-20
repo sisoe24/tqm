@@ -310,11 +310,17 @@ class TaskManagerView(QWidget):
         table_widget = Frame()
         table_widget.setLayout(table_layout)
 
-        splitter = QSplitter()
+        self._splitter = splitter = QSplitter()
         splitter.addWidget(table_widget)
         splitter.addWidget(self._debug_widget)
         if os.getenv('DEV_MODE') != '1':
             splitter.setSizes([100, 0])
+
+        # Not saved: the debug panel is a dev tool and starts closed.
+        show_debug = self.toolbar.view_menu.show_debug
+        show_debug.setChecked(os.getenv('DEV_MODE') == '1')
+        show_debug.toggled.connect(self._on_show_debug)
+        splitter.splitterMoved.connect(lambda: show_debug.setChecked(splitter.sizes()[1] > 0))
 
         layout = QVBoxLayout()
         layout.addWidget(splitter)
@@ -325,6 +331,14 @@ class TaskManagerView(QWidget):
         # Closing the bar clears the search, so no hidden filter stays on.
         if not shown:
             self.toolbar.search_bar.clear()
+
+    @Slot(bool)
+    def _on_show_debug(self, show: bool) -> None:
+        sizes = self._splitter.sizes()
+        if show == (sizes[1] > 0):
+            return
+        total = sum(sizes)
+        self._splitter.setSizes([total * 7 // 10, total - total * 7 // 10] if show else [total, 0])
 
     @Slot(QModelIndex)
     def _on_toggle_debug(self, index: QModelIndex) -> None:

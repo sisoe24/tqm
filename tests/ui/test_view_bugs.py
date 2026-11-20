@@ -20,7 +20,7 @@ from PySide2.QtWidgets import (QMenu, QAction, QLineEdit, QApplication,
 from tqm import TQManager, TaskBuilder, TaskGroupBuilder
 from tqm._core.logger import LOGGER
 from tqm._core.settings import get_config_path
-from tqm._ui.toolbar import TableOptions, TasksViewToolbar
+from tqm._ui.toolbar import ViewMenu, TableOptions, TasksViewToolbar
 from tqm._ui.debug_widget import TasksList, DebugWidget, StateHistoryWidget
 from tqm._ui.ui_view_model import TaskTreeView
 from tqm._ui.progress_bar_delegate import ProgressBarRenderer
@@ -558,3 +558,80 @@ def test_bad_saved_log_panel_size_opens_the_default(make_manager: Callable[[str]
     tree, log = log_splitter(make_manager('a')).sizes()
 
     assert tree > log > 0
+
+
+def menu_action(manager: TQManager, text: str) -> QAction:
+    return next(a for a in manager.findChildren(QAction) if a.text() == text)
+
+
+def test_show_log_hides_and_restores_the_log_panel(make_manager: Callable[[str], TQManager]):
+    manager = make_manager('a')
+    splitter = log_splitter(manager)
+    show_log = menu_action(manager, 'Show Log')
+    assert show_log.isChecked()
+    open_sizes = splitter.sizes()
+
+    show_log.setChecked(False)
+    assert splitter.sizes()[1] == 0
+
+    show_log.setChecked(True)
+    assert splitter.sizes() == open_sizes
+
+
+def test_show_log_follows_a_drag_that_closes_the_log(make_manager: Callable[[str], TQManager]):
+    manager = make_manager('a')
+    splitter = log_splitter(manager)
+
+    splitter.setSizes([sum(splitter.sizes()), 0])
+    splitter.splitterMoved.emit(sum(splitter.sizes()), 1)
+
+    assert not menu_action(manager, 'Show Log').isChecked()
+
+
+def test_hidden_log_panel_stays_hidden_on_next_launch(qtbot: QtBot, make_manager: Callable[[str], TQManager]):
+    manager = make_manager('a')
+    log_splitter(manager)
+    menu_action(manager, 'Show Log').setChecked(False)
+    settings = get_config_path('a') / 'settings.json'
+    qtbot.wait_until(lambda: json.loads(settings.read_text())['splitter_sizes'][1] == 0)
+
+    again = make_manager('a')
+
+    assert log_splitter(again).sizes()[1] == 0
+    assert not menu_action(again, 'Show Log').isChecked()
+
+
+def debug_splitter(manager: TQManager) -> QSplitter:
+    log_splitter(manager)
+    return manager.findChild(DebugWidget).parentWidget()
+
+
+def test_show_debug_panel_opens_and_closes_it(make_manager: Callable[[str], TQManager]):
+    manager = make_manager('a')
+    splitter = debug_splitter(manager)
+    show_debug = menu_action(manager, 'Show Debug Panel')
+    assert not show_debug.isChecked()
+    assert splitter.sizes()[1] == 0
+
+    show_debug.setChecked(True)
+    assert splitter.sizes()[1] > 0
+
+    show_debug.setChecked(False)
+    assert splitter.sizes()[1] == 0
+
+
+def test_debug_panel_is_closed_on_next_launch(make_manager: Callable[[str], TQManager]):
+    manager = make_manager('a')
+    debug_splitter(manager)
+    menu_action(manager, 'Show Debug Panel').setChecked(True)
+
+    again = make_manager('a')
+
+    assert debug_splitter(again).sizes()[1] == 0
+    assert not menu_action(again, 'Show Debug Panel').isChecked()
+
+
+def test_view_button_holds_the_panel_toggles(app: TQManager):
+    menu = app.findChild(ViewMenu).menu()
+
+    assert [a.text() for a in menu.actions()] == ['Show Log', 'Show Debug Panel']

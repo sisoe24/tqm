@@ -72,6 +72,26 @@ class TableOptions(ToolButton):
         self.setMenu(menu)
 
 
+class ViewMenu(ToolButton):
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+
+        self.setIcon(QIcon(':/icons/dark/layout'))
+        self.setToolTip('Show or hide panels')
+        self.setPopupMode(QToolButton.InstantPopup)
+
+        self.show_log = QAction('Show Log', self)
+        self.show_log.setCheckable(True)
+        self.show_debug = QAction('Show Debug Panel', self)
+        self.show_debug.setCheckable(True)
+
+        menu = QMenu(self)
+        menu.addAction(self.show_log)
+        menu.addAction(self.show_debug)
+        self.setMenu(menu)
+
+
 class TasksViewToolbar(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -84,6 +104,7 @@ class TasksViewToolbar(QWidget):
         self.run_all_tasks.setToolTip('Run all tasks')
 
         self.table_options = TableOptions()
+        self.view_menu = ViewMenu()
 
         self.retry_all_btn = ToolButton()
         self.retry_all_btn.setIcon(QIcon(':/icons/dark/refresh'))
@@ -109,6 +130,7 @@ class TasksViewToolbar(QWidget):
         layout.addWidget(self.retry_all_btn)
         layout.addWidget(self.clear_tasks)
         layout.addWidget(self.table_options)
+        layout.addWidget(self.view_menu)
         layout.addWidget(self.search_btn)
         layout.addWidget(self.search_bar)
         layout.addStretch()
