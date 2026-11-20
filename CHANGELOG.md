@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Log panel lines are colored by task, not by thread, and no longer show the thread column.
 - The log panel opens at 70/30 on first launch and remembers its size. `DEV_MODE` no longer affects it.
+- Icons come from one set, Lucide (ISC license, in `resources/icons`). Unused icons are removed.
 
 ## v0.3.0
 
