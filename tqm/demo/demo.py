@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 import random
@@ -277,6 +278,10 @@ def setup_manager() -> TQManager:
     demo_tasks.add_task_with_callbacks()
     demo_tasks.add_complex_group()
 
+    # TQM_DEMO_NO_POPUP=1 skips the welcome box, for quick dev runs.
+    if os.getenv('TQM_DEMO_NO_POPUP') == '1':
+        return task_manager
+
     QMessageBox.information(
         task_manager,
         'TQM Demo',
@@ -308,6 +313,15 @@ def run_demo():
 
     window = QMainWindow()
     window.setCentralWidget(setup_manager())
+
+    # TQM_DEMO_GEOMETRY="x,y,width,height" places the window, for example on another monitor.
+    geometry = os.getenv('TQM_DEMO_GEOMETRY')
+    if geometry:
+        try:
+            window.setGeometry(*map(int, geometry.split(',')))
+        except (ValueError, TypeError):
+            print(f'[tqm demo]: Ignoring TQM_DEMO_GEOMETRY={geometry!r}, expected "x,y,width,height".')
+
     window.show()
 
     sys.exit(app.exec_())
