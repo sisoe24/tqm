@@ -2,14 +2,13 @@
 <RCC version="1.0">
 
 	<qresource prefix="icons">
-		<file alias="dark/circle-filled">icons/dark/circle-filled.svg</file>
-		<file alias="dark/circle-line">icons/dark/circle-line.svg</file>
-		<file alias="dark/circle-parent">icons/dark/circle-parent.svg</file>
+		<file alias="dark/group">icons/dark/group.svg</file>
 		<file alias="dark/layout">icons/dark/layout.svg</file>
 		<file alias="dark/refresh">icons/dark/refresh.svg</file>
 		<file alias="dark/run-all">icons/dark/run-all.svg</file>
 		<file alias="dark/search">icons/dark/search.svg</file>
 		<file alias="dark/settings-gear">icons/dark/settings-gear.svg</file>
+		<file alias="dark/task">icons/dark/task.svg</file>
 		<file alias="dark/trash">icons/dark/trash.svg</file>
 	</qresource>
 

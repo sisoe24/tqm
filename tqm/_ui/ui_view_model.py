@@ -85,7 +85,7 @@ class TreeModel(QStandardItemModel):
                 f'Expected TaskGroup "{task_group.name}" to have an associated group item, but none was found.'
             )
 
-        group_item.setIcon(_icon(':/icons/dark/circle-parent'))
+        group_item.setIcon(_icon(':/icons/dark/group'))
         f = group_item.font()
         f.setBold(True)
         group_item.setFont(f)
@@ -96,7 +96,7 @@ class TreeModel(QStandardItemModel):
                 task.color = task_group.color
 
             task.item = TaskItem(task.name, foreground=task.color)
-            task.item.setIcon(_icon(':/icons/dark/circle-line'))
+            task.item.setIcon(_icon(':/icons/dark/task'))
             task.item.setData(task, Qt.UserRole)
 
             group_item.appendRow(self._create_task_row(task.item, task))
@@ -104,7 +104,7 @@ class TreeModel(QStandardItemModel):
     def add_task(self, task_unit: TaskUnit) -> TaskItem:
 
         task_unit.item = TaskItem(task_unit.name, foreground=task_unit.color)
-        task_unit.item.setIcon(_icon(':/icons/dark/circle-filled'))
+        task_unit.item.setIcon(_icon(':/icons/dark/task'))
         task_unit.item.setData(task_unit, Qt.UserRole)
 
         if isinstance(task_unit, TaskGroup):
