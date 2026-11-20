@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Log panel lines are colored by task, not by thread, and no longer show the thread column.
+- The log panel opens at 70/30 on first launch and remembers its size. `DEV_MODE` no longer affects it.
 
 ## v0.3.0
 

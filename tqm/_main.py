@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import os
-from typing import Any, Callable, Optional, Generator
+from typing import Any, List, Callable, Optional, Generator
+from pathlib import Path
 from contextlib import contextmanager
 
-from PySide2.QtCore import Qt
+from PySide2.QtCore import Qt, QTimer
 from PySide2.QtWidgets import QWidget, QSplitter, QMainWindow, QMessageBox
 
 from ._core.task import TaskUnit, TaskGroup, TaskExecutable
 from ._core.logger import LOGGER, USER_LEVEL, remove_handlers, add_file_handler
 from ._ui.tab_logs import TasksLog
-from ._core.settings import get_qss_path, open_settings, get_config_path
+from ._core.settings import Settings, get_qss_path, open_settings, get_config_path
 from ._ui.ui_controller import TaskManagerController, _TaskButtonsController
 from ._ui.ui_view_model import TaskManagerView
 from ._core.task_builder import TaskBuilder, TaskGroupBuilder
@@ -85,10 +85,23 @@ class TQManager(QMainWindow):
         splitter.addWidget(self._view)
         splitter.addWidget(self._logs)
 
-        if os.getenv('DEV_MODE') != '1':
-            splitter.setSizes([100, 0])
+        sizes = settings.splitter_sizes
+        valid = len(sizes) == 2 and all(isinstance(s, int) and s >= 0 for s in sizes) and sum(sizes) > 0
+        splitter.setSizes(sizes if valid else Settings().splitter_sizes)
+
+        # Save once the drag stops, not on every move.
+        save_sizes = QTimer(splitter)
+        save_sizes.setSingleShot(True)
+        save_sizes.setInterval(1000)
+        save_sizes.timeout.connect(lambda: self._save_splitter_sizes(settings_path, splitter.sizes()))
+        splitter.splitterMoved.connect(lambda *_: save_sizes.start())
 
         self.setCentralWidget(splitter)
+
+    @staticmethod
+    def _save_splitter_sizes(settings_path: Path, sizes: List[int]) -> None:
+        with open_settings(mode='w', json_file_path=settings_path) as s:
+            s.splitter_sizes = sizes
 
     @property
     def callbacks(self) -> _ExecutorCallbacks:

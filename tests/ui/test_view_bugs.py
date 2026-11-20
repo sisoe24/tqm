@@ -14,7 +14,7 @@ from PySide2.QtCore import Qt, QEvent
 from PySide2.QtTest import QTest
 from pytestqt.qtbot import QtBot
 from PySide2.QtWidgets import (QMenu, QAction, QLineEdit, QApplication,
-                               QTableWidget, QPlainTextEdit,
+                               QSplitter, QTableWidget, QPlainTextEdit,
                                QTreeWidget, QStyleOptionProgressBar)
 
 from tqm import TQManager, TaskBuilder, TaskGroupBuilder
@@ -521,3 +521,40 @@ def test_debug_panel_wraps_long_values(qtbot: QtBot, app: TQManager):
 
     assert tree.columnWidth(0) + tree.columnWidth(1) <= tree.viewport().width()
     assert tree.visualItemRect(note).height() > 2 * tree.fontMetrics().height()
+
+
+def log_splitter(manager: TQManager) -> QSplitter:
+    """Show the window at a fixed size, so the splitter has real heights."""
+    manager.resize(800, 1000)
+    manager.show()
+    QApplication.processEvents()
+    return manager.centralWidget()
+
+
+def test_log_panel_opens_on_first_launch(make_manager: Callable[[str], TQManager]):
+    tree, log = log_splitter(make_manager('a')).sizes()
+    assert log > 0
+    assert tree > log
+
+
+def test_log_panel_size_is_remembered(qtbot: QtBot, make_manager: Callable[[str], TQManager]):
+    splitter = log_splitter(make_manager('a'))
+    splitter.setSizes([400, 600])
+    splitter.splitterMoved.emit(400, 1)
+    settings = get_config_path('a') / 'settings.json'
+    qtbot.wait_until(lambda: json.loads(settings.read_text())['splitter_sizes'] != [70, 30])
+
+    tree, log = log_splitter(make_manager('a')).sizes()
+
+    assert log > tree
+
+
+@pytest.mark.parametrize('sizes', [[], [1, 2, 3], [-5, 10], [0, 0]])
+def test_bad_saved_log_panel_size_opens_the_default(make_manager: Callable[[str], TQManager], sizes: List[int]):
+    folder = get_config_path('a')
+    folder.mkdir(parents=True)
+    (folder / 'settings.json').write_text(json.dumps({'splitter_sizes': sizes}))
+
+    tree, log = log_splitter(make_manager('a')).sizes()
+
+    assert tree > log > 0
