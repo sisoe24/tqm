@@ -112,6 +112,16 @@ class TQManager(QMainWindow):
         for task in tasks:
             self.executor.remove_task(task)
 
+    def cancel_tasks(self, *tasks: TaskUnit) -> None:
+        """Stop tasks. Tasks that have not started end cancelled at once.
+
+        A running task cannot be killed: its callable must check `task.cancel_requested`
+        or register a hook with `task.on_cancel`, for example to stop a subprocess.
+        Until it returns, the task stays running.
+        """
+        for task in tasks:
+            self.executor.cancel_task(task)
+
     def log(self, text: str) -> None:
         """Write a message to this manager's log panel and log file.
 

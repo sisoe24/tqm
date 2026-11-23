@@ -149,6 +149,7 @@ class TaskManagerController(QObject):
 
         self.view.tree_view.selected_task_removed.connect(self._on_remove_selected_tasks)
         self.view.tree_view.selected_task_retried.connect(self._on_retry_selected)
+        self.view.tree_view.selected_task_cancelled.connect(self._on_cancel_selected)
 
     def _update_item_data(
         self,
@@ -231,6 +232,14 @@ class TaskManagerController(QObject):
             self._on_task_finished(task)
         else:
             self.view.tree_view.tasks_model.removeRow(remove_row)
+
+    @Slot()
+    def _on_cancel_selected(self) -> None:
+        for task in self.get_selected_tasks():
+            self._executor.cancel_task(task)
+            # The task stays running until its callable returns.
+            if task.state.is_running:
+                self._update_item_data(task, 'Last message', 'Stopping...')
 
     @Slot()
     def _on_remove_selected_tasks(self) -> None:

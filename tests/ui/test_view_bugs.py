@@ -635,3 +635,19 @@ def test_view_button_holds_the_panel_toggles(app: TQManager):
     menu = app.findChild(ViewMenu).menu()
 
     assert [a.text() for a in menu.actions()] == ['Show Log', 'Show Debug Panel']
+
+
+def test_context_stop_then_retry(qtbot: QtBot, app: TQManager, view: TaskTreeView, gate: Callable[[], Event]):
+    release = gate()
+    task = TaskBuilder('Aaa').with_event(lambda t: release.wait(5)).build()
+    app.add_tasks(task)
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_running)
+
+    assert 'Retry' not in open_context_menu(view, 'Aaa', 'Stop selected')
+    release.set()
+    qtbot.wait_until(lambda: task.state.is_cancelled)
+
+    labels = open_context_menu(view, 'Aaa', 'Retry')
+    assert 'Stop selected' not in labels
+    qtbot.wait_until(lambda: task.state.is_completed)

@@ -171,6 +171,7 @@ def _natural_key(text: str) -> List[Union[int, str]]:
 class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
     selected_task_retried = Signal(TaskExecutable)
     selected_task_removed = Signal()
+    selected_task_cancelled = Signal()
 
     def __init__(self, settings_path: Path, parent: Optional[QWidget] = None) -> None:
         super().__init__(self, self, settings_path, parent)
@@ -262,11 +263,15 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
         elif task.state.is_failed:
             add_actions(task.actions, TaskActionVisibility.ON_FAILED)
 
-            if isinstance(task, TaskExecutable) and not task.parent:
-                retry = menu.addAction('Retry')
-                retry.triggered.connect(lambda: self.selected_task_retried.emit(task))
+        if (task.state.is_failed or task.state.is_cancelled) and isinstance(task, TaskExecutable) and not task.parent:
+            retry = menu.addAction('Retry')
+            retry.triggered.connect(lambda: self.selected_task_retried.emit(task))
 
         menu.addSeparator()
+
+        state = task.state
+        if state.is_running or state.is_waiting or state.is_blocked or state.is_retrying:
+            menu.addAction('Stop selected').triggered.connect(self.selected_task_cancelled.emit)
 
         if task.state.is_removable:
             menu.addAction('Remove selected').triggered.connect(self.selected_task_removed.emit)

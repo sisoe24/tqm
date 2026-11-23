@@ -374,7 +374,7 @@ MUTANTS = [
         EXECUTOR,
         (
             'for child in task.children.copy():\n'
-            '            if child.state.is_failed:\n'
+            '            if child.state.is_failed or child.state.is_cancelled:\n'
             '                self.retry_task(child)'
         ),
         'pass',
@@ -514,8 +514,8 @@ MUTANTS = [
     ),
     Mutant(
         EXECUTOR,
-        'if not all(t.state.is_completed or t.state.is_failed for t in members):',
-        'if not all(t.state.is_completed for t in members):',
+        'if not all(t.state.is_completed or t.state.is_failed or t.state.is_cancelled for t in members):',
+        'if not all(t.state.is_completed or t.state.is_cancelled for t in members):',
         'group: waits forever on failed task',
     ),
     Mutant(
@@ -630,8 +630,8 @@ MUTANTS = [
     ),
     Mutant(
         STATE,
-        'self.is_completed, self.is_failed, self.is_blocked, self.is_retrying',
-        'self.is_failed, self.is_blocked, self.is_retrying',
+        'self.is_completed, self.is_failed, self.is_cancelled, self.is_blocked, self.is_retrying',
+        'self.is_failed, self.is_cancelled, self.is_blocked, self.is_retrying',
         'is_removable: completed not removable',
     ),
     Mutant(
@@ -1431,5 +1431,133 @@ MUTANTS = [
         ),
         'pass',
         'font: TQM_MONO_FONT ignored',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if task.cancel_requested:\n'
+            '            self._finish_cancelled(task)\n'
+            '        else:\n'
+            '            self._handle_failure(task, exception)'
+        ),
+        'self._handle_failure(task, exception)',
+        'cancel: a raising cancelled task fails and retries',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if task.cancel_requested:\n'
+            '            self._finish_cancelled(task)\n'
+            '            if autostart:'
+        ),
+        'if False:\n            if autostart:',
+        'cancel: a returning cancelled task completes',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if not state.is_running:\n'
+            '            self._finish_cancelled(task)\n'
+            '            return'
+        ),
+        'pass',
+        'cancel: a waiting task stays queued',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'for member in list(task.tasks):\n'
+            '                self.cancel_task(member)'
+        ),
+        'pass',
+        'cancel: group members keep running',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'for child in task.children.copy():\n'
+            '            self.cancel_task(child)'
+        ),
+        'pass',
+        'cancel: children stay blocked',
+    ),
+    Mutant(
+        EXECUTOR,
+        "any(t.state.is_cancelled for t in members) and not any(t.state.is_failed for t in members)",
+        'False',
+        'cancel: group with a cancelled member fails',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if parent and parent.state.is_cancelled:\n'
+            '            task._request_cancel()\n'
+            '            self._finish_cancelled(task)\n'
+            '            return'
+        ),
+        'pass',
+        'cancel: child of a cancelled parent dispatched',
+    ),
+    Mutant(
+        EXECUTOR,
+        'if member.state.is_failed or member.state.is_cancelled:',
+        'if member.state.is_failed:',
+        'retry: cancelled group members not reset',
+    ),
+    Mutant(
+        TASK_BASE,
+        (
+            'for hook in hooks:\n'
+            '            self._run_cancel_hook(hook)'
+        ),
+        'pass',
+        'cancel: hooks never run',
+    ),
+    Mutant(
+        TASK_BASE,
+        'self._cancel_hooks.append(hook)\n                return',
+        'pass',
+        'cancel: hook runs at once while not cancelled',
+    ),
+    Mutant(
+        TASK_BASE,
+        (
+            'if self._cancel_requested:\n'
+            '                return False'
+        ),
+        'pass',
+        'cancel: hooks run on every cancel',
+        equivalent='the first cancel empties the hook list, so a second one only logs again',
+    ),
+    Mutant(
+        TASK_BASE,
+        (
+            'try:\n'
+            '            hook()\n'
+            '        except Exception as error:'
+        ),
+        'if True:\n            hook()\n        if False:',
+        'cancel: a raising hook breaks the cancel',
+    ),
+    Mutant(
+        TASK_BASE,
+        (
+            'self._cancel_requested = False\n'
+            '            self._cancel_hooks = []'
+        ),
+        'pass',
+        'cancel: retry keeps the flag',
+    ),
+    Mutant(
+        CONTROLLER,
+        'self._executor.cancel_task(task)',
+        'pass',
+        'ui: Stop does nothing',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        "menu.addAction('Stop selected').triggered.connect(self.selected_task_cancelled.emit)",
+        'pass',
+        'ui: no Stop in the menu',
     ),
 ]

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from typing import (TYPE_CHECKING, Any, Set, Dict, Tuple, Generic, TypeVar,
-                    Iterator, Optional)
+import threading
+from typing import (TYPE_CHECKING, Any, Set, Dict, List, Tuple, Generic, TypeVar,
+                    Callable, Iterator, Optional)
 from itertools import count
 from dataclasses import field, dataclass
 
@@ -69,6 +70,11 @@ class TaskBase(Generic[T]):
     id: uuid.UUID = field(init=False, default_factory=uuid.uuid4)
     index: int = field(init=False)
 
+    # cancel: set on the main thread, read by the running callable
+    _cancel_requested: bool = field(init=False, default=False, repr=False, compare=False)
+    _cancel_hooks: List[Callable[[], Any]] = field(init=False, default_factory=list, repr=False, compare=False)
+    _cancel_lock: threading.Lock = field(init=False, default_factory=threading.Lock, repr=False, compare=False)
+
     def __post_init__(self, suffix: str = '') -> None:
         """Initialize the task state."""
         self.state.set_inactive()
@@ -98,6 +104,46 @@ class TaskBase(Generic[T]):
         if tag:
             tag.task_logged.emit(self, text)
 
+    @property
+    def cancel_requested(self) -> bool:
+        """True once the user asked to stop this task. A long callable checks it and returns."""
+        return self._cancel_requested
+
+    def on_cancel(self, hook: Callable[[], Any]) -> None:
+        """Call `hook` when the task is cancelled, for work that blocks, like a subprocess.
+
+        The hook runs on the thread that cancels the task. If the task is already
+        cancelled, it runs now, on the caller's thread.
+
+        ```
+        proc = subprocess.Popen(cmd)
+        task.on_cancel(proc.terminate)
+        proc.wait()
+        ```
+        """
+        with self._cancel_lock:
+            if not self._cancel_requested:
+                self._cancel_hooks.append(hook)
+                return
+        self._run_cancel_hook(hook)
+
+    def _request_cancel(self) -> bool:
+        """Set the flag and run the hooks once. False if the cancel was already requested."""
+        with self._cancel_lock:
+            if self._cancel_requested:
+                return False
+            self._cancel_requested = True
+            hooks, self._cancel_hooks = self._cancel_hooks, []
+        for hook in hooks:
+            self._run_cancel_hook(hook)
+        return True
+
+    def _run_cancel_hook(self, hook: Callable[[], Any]) -> None:
+        try:
+            hook()
+        except Exception as error:  # a broken hook must not stop the cancel
+            LOGGER.error(f'{self.name} cancel hook failed: {error}', extra={'tqm_task': str(self.id)})
+
     def delete(self, comment: str = '') -> None:
         """Mark the task as deleted and clean up resources."""
         self.predicate.delete()
@@ -116,6 +162,10 @@ class TaskBase(Generic[T]):
 
         self.predicate.reset()
         self.exception = None
+
+        with self._cancel_lock:
+            self._cancel_requested = False
+            self._cancel_hooks = []
 
     def set_failed(self, exception: Optional[Exception] = None, comment: str = '') -> None:
         self.exception = exception

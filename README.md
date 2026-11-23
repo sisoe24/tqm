@@ -28,6 +28,7 @@ Basically, a Task Queue Manager.
   - Simple API for creating and queuing tasks
   - Callbacks for task lifecycle events (start, finish, fail, complete)
   - Predicates to control when tasks should run
+  - Stop running tasks: check `task.cancel_requested` in long loops, or register `task.on_cancel(proc.terminate)` for a subprocess
   - Customizable task colors and more
   - Comprehensive typing annotations
 

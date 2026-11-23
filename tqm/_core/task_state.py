@@ -15,6 +15,7 @@ class TaskStateEnum(str, Enum):
     RUNNING = 'running'
     COMPLETED = 'completed'
     FAILED = 'failed'
+    CANCELLED = 'cancelled'
     BLOCKED = 'blocked'
     RETRYING = 'retrying'
     DELETED = 'deleted'
@@ -31,6 +32,7 @@ class TaskStates:
         TaskStateEnum.BLOCKED:   QColor('#D19A66'),  # ORANGE
         TaskStateEnum.RETRYING:  QColor('#C678DD'),  # PURPLE
         TaskStateEnum.FAILED:    QColor('#E06C75'),  # BRIGHT RED
+        TaskStateEnum.CANCELLED: QColor('#E5C07B'),  # YELLOW
         TaskStateEnum.DELETED:   QColor('#BE5046'),  # DARKER RED
         TaskStateEnum.WAITING:   QColor('#8A8D94'),  # LIGHT GREY
         TaskStateEnum.INACTIVE:  QColor('#5C6370'),  # MEDIUM GREY
@@ -63,12 +65,13 @@ def format_duration(seconds: float) -> str:
 _S = TaskStateEnum
 ALLOWED_TRANSITIONS: Dict[TaskStateEnum, FrozenSet[TaskStateEnum]] = {
     _S.INACTIVE: frozenset({_S.WAITING, _S.DELETED}),
-    _S.WAITING: frozenset({_S.RUNNING, _S.BLOCKED, _S.FAILED, _S.DELETED}),
-    _S.BLOCKED: frozenset({_S.WAITING, _S.RUNNING, _S.RETRYING, _S.FAILED, _S.DELETED}),
-    _S.RETRYING: frozenset({_S.INACTIVE, _S.RUNNING, _S.BLOCKED, _S.FAILED, _S.DELETED}),
-    _S.RUNNING: frozenset({_S.COMPLETED, _S.FAILED, _S.RETRYING}),
+    _S.WAITING: frozenset({_S.RUNNING, _S.BLOCKED, _S.FAILED, _S.CANCELLED, _S.DELETED}),
+    _S.BLOCKED: frozenset({_S.WAITING, _S.RUNNING, _S.RETRYING, _S.FAILED, _S.CANCELLED, _S.DELETED}),
+    _S.RETRYING: frozenset({_S.INACTIVE, _S.RUNNING, _S.BLOCKED, _S.FAILED, _S.CANCELLED, _S.DELETED}),
+    _S.RUNNING: frozenset({_S.COMPLETED, _S.FAILED, _S.RETRYING, _S.CANCELLED}),
     _S.COMPLETED: frozenset({_S.INACTIVE, _S.DELETED}),
     _S.FAILED: frozenset({_S.INACTIVE, _S.DELETED}),
+    _S.CANCELLED: frozenset({_S.INACTIVE, _S.DELETED}),
     _S.DELETED: frozenset(),
 }
 
@@ -163,6 +166,9 @@ class TaskState:
     def set_failed(self, comment: str = '') -> None:
         self._set_state(TaskStateEnum.FAILED, comment)
 
+    def set_cancelled(self, comment: str = '') -> None:
+        self._set_state(TaskStateEnum.CANCELLED, comment)
+
     def set_blocked(self, comment: str = '') -> None:
         self._set_state(TaskStateEnum.BLOCKED, comment)
 
@@ -197,6 +203,10 @@ class TaskState:
         return self.current == TaskStateEnum.FAILED
 
     @property
+    def is_cancelled(self) -> bool:
+        return self.current == TaskStateEnum.CANCELLED
+
+    @property
     def is_blocked(self) -> bool:
         return self.current == TaskStateEnum.BLOCKED
 
@@ -218,11 +228,11 @@ class TaskState:
 
     @property
     def is_retryable(self) -> bool:
-        return self.is_failed or self.is_completed
+        return self.is_failed or self.is_completed or self.is_cancelled
 
     @property
     def is_removable(self) -> bool:
         return any([
             self.is_waiting, self.is_deleted, self.is_inactive,
-            self.is_completed, self.is_failed, self.is_blocked, self.is_retrying
+            self.is_completed, self.is_failed, self.is_cancelled, self.is_blocked, self.is_retrying
         ])

@@ -38,6 +38,7 @@ class _ExecutorCallbacks(QObject):
     runner_started = Signal(object)
     runner_completed = Signal(object)
     runner_failed = Signal(object, Exception)
+    runner_cancelled = Signal(object)
 
     status_updated = Signal(dict)
     system_idle = Signal()
@@ -379,16 +380,16 @@ class TaskExecutor(QObject):
 
         # Reset members are queued when the group starts again.
         for member in getattr(task, 'tasks', ()):
-            if member.state.is_failed:
+            if member.state.is_failed or member.state.is_cancelled:
                 member.reset('Reset & Retry', reset_attempts=True)
 
         for child in task.children.copy():
-            if child.state.is_failed:
+            if child.state.is_failed or child.state.is_cancelled:
                 self.retry_task(child)
 
         if (
             isinstance(task, TaskExecutable)
-            and (task.group and task.group.state.is_failed)
+            and (task.group and (task.group.state.is_failed or task.group.state.is_cancelled))
         ):
             self.retry_task(task.group)
 
@@ -410,7 +411,10 @@ class TaskExecutor(QObject):
     @Slot(object)
     def _on_task_failed(self, task: TaskUnit, exception: Exception) -> None:
         """Handle a failed task. If its retry policy allows, it is retried later."""
-        self._handle_failure(task, exception)
+        if task.cancel_requested:
+            self._finish_cancelled(task)
+        else:
+            self._handle_failure(task, exception)
         self.start_workers()
 
     def _handle_failure(self, task: TaskUnit, exception: Exception) -> None:
@@ -443,6 +447,12 @@ class TaskExecutor(QObject):
 
     @Slot(object)
     def _on_task_completed(self, task: TaskUnit, *, autostart: bool = True) -> None:
+        if task.cancel_requested:
+            self._finish_cancelled(task)
+            if autostart:
+                self.start_workers()
+            return
+
         task.state.set_completed()
         LOGGER.info(f'{task.name} completed', extra={'tqm_task': str(task.id)})
 
@@ -459,6 +469,47 @@ class TaskExecutor(QObject):
 
         if autostart:
             self.start_workers()
+
+    def cancel_task(self, task: TaskUnit) -> None:
+        """Stop a task, its group members and the tasks that wait for it.
+
+        A task that has not started ends cancelled now. A running task gets
+        `cancel_requested` and its `on_cancel` hooks run; it ends cancelled when its
+        callable returns. Finished tasks are left as they are.
+        """
+        self._check_thread()
+        state = task.state
+        if not (state.is_running or state.is_waiting or state.is_blocked or state.is_retrying):
+            return
+        if not task._request_cancel():
+            return
+
+        if not state.is_running:
+            self._finish_cancelled(task)
+            return
+
+        LOGGER.info(f'{task.name} stop requested', extra={'tqm_task': str(task.id)})
+        if isinstance(task, TaskGroup):
+            for member in list(task.tasks):
+                self.cancel_task(member)
+
+    def _finish_cancelled(self, task: TaskUnit) -> None:
+        """End a task cancelled, and every child still waiting for it."""
+        LOGGER.info(f'{task.name} cancelled', extra={'tqm_task': str(task.id)})
+
+        with contextlib.suppress(TaskNotFoundError):
+            self.queue.remove_task(task)
+
+        task.predicate.stop()
+        task.state.set_cancelled('Stopped by user')
+
+        self._on_task_finished(task)
+        self.callbacks.runner_cancelled.emit(task)
+
+        for child in task.children.copy():
+            self.cancel_task(child)
+
+        self._settle_group(getattr(task, 'group', None))
 
     @Slot(object)
     def _on_task_finished(self, task: TaskUnit) -> None:
@@ -532,10 +583,15 @@ class TaskExecutor(QObject):
             return
 
         members = [t for t in group.tasks if not t.state.is_deleted]
-        if not all(t.state.is_completed or t.state.is_failed for t in members):
+        if not all(t.state.is_completed or t.state.is_failed or t.state.is_cancelled for t in members):
             return
 
-        if all(t.state.is_completed for t in members):
+        if group.cancel_requested or (
+            any(t.state.is_cancelled for t in members) and not any(t.state.is_failed for t in members)
+        ):
+            group._request_cancel()
+            self._finish_cancelled(group)
+        elif all(t.state.is_completed for t in members):
             self._on_task_completed(group, autostart=False)
         else:
             self._handle_failure(group, TaskEventError('Some tasks failed'))
@@ -547,6 +603,11 @@ class TaskExecutor(QObject):
 
     def _dispatch(self, task: TaskUnit) -> None:
         parent = task.parent
+        if parent and parent.state.is_cancelled:
+            task._request_cancel()
+            self._finish_cancelled(task)
+            return
+
         if parent and parent.state.is_failed:
             self._fail_task(task, TaskParentError(f'Parent {parent.name} failed.'))
             return
