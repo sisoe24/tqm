@@ -27,6 +27,7 @@ DEBUG_WIDGET = 'tqm/_ui/debug_widget.py'
 FONT_LOADER = 'tqm/_ui/font_loader.py'
 TASK_BASE = 'tqm/_core/task_base.py'
 RUN_PROCESS = 'tqm/utils/run_process.py'
+VIEW_MIXIN = 'tqm/_ui/mixins/view_mixin.py'
 TASK = 'tqm/_core/task.py'
 
 
@@ -1608,5 +1609,11 @@ MUTANTS = [
         'if proc.returncode != 0:',
         'if False:',
         'run_process: a failed command passes',
+    ),
+    Mutant(
+        VIEW_MIXIN,
+        'self.__header.setStretchLastSection(False)',
+        'pass',
+        'ui: the last column stretches and scroll stops before it',
     ),
 ]

@@ -201,7 +201,6 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
         header = self.header()
         header.setObjectName('TqmHeaderView')
         header.setSortIndicatorShown(True)
-        header.setStretchLastSection(True)
         header.setSectionsMovable(True)
 
         self.load_table_state()

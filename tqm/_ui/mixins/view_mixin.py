@@ -105,6 +105,8 @@ class ViewStateMixing:
             state = self.__initial_state
 
         self.__header.restoreState(state)
+        # QTreeView stretches the last column by default, and a saved state can turn it back on.
+        self.__header.setStretchLastSection(False)
 
         for column, index in self.get_columns().items():
             self.__view.setColumnHidden(
