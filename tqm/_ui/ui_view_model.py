@@ -47,7 +47,7 @@ class TreeModel(QStandardItemModel):
         super().__init__(parent)
 
         self._headers = (
-            'Task', 'Progress', 'Wait for', 'Comment',
+            'Task', 'Progress', 'Wait for', 'Last message', 'Comment',
             'Created', 'Started', 'Completed',
         )
 
@@ -69,6 +69,7 @@ class TreeModel(QStandardItemModel):
             item,
             TaskItem('', has_progress=True),
             TaskItem(task.parent.name if task.parent else ''),
+            TaskItem(''),
             TaskItem(task.comment, is_editable=True),
             TaskItem(task.state.get_first().timestamp, alignment=Qt.AlignCenter),
             TaskItem('', alignment=Qt.AlignCenter),
@@ -84,7 +85,7 @@ class TreeModel(QStandardItemModel):
                 f'Expected TaskGroup "{task_group.name}" to have an associated group item, but none was found.'
             )
 
-        group_item.setIcon(_icon(':/icons/dark/circle-parent'))
+        group_item.setIcon(_icon(':/icons/dark/group'))
         f = group_item.font()
         f.setBold(True)
         group_item.setFont(f)
@@ -95,7 +96,7 @@ class TreeModel(QStandardItemModel):
                 task.color = task_group.color
 
             task.item = TaskItem(task.name, foreground=task.color)
-            task.item.setIcon(_icon(':/icons/dark/circle-line'))
+            task.item.setIcon(_icon(':/icons/dark/task'))
             task.item.setData(task, Qt.UserRole)
 
             group_item.appendRow(self._create_task_row(task.item, task))
@@ -103,7 +104,7 @@ class TreeModel(QStandardItemModel):
     def add_task(self, task_unit: TaskUnit) -> TaskItem:
 
         task_unit.item = TaskItem(task_unit.name, foreground=task_unit.color)
-        task_unit.item.setIcon(_icon(':/icons/dark/circle-filled'))
+        task_unit.item.setIcon(_icon(':/icons/dark/task'))
         task_unit.item.setData(task_unit, Qt.UserRole)
 
         if isinstance(task_unit, TaskGroup):
@@ -170,6 +171,7 @@ def _natural_key(text: str) -> List[Union[int, str]]:
 class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
     selected_task_retried = Signal(TaskExecutable)
     selected_task_removed = Signal()
+    selected_task_cancelled = Signal()
 
     def __init__(self, settings_path: Path, parent: Optional[QWidget] = None) -> None:
         super().__init__(self, self, settings_path, parent)
@@ -199,7 +201,6 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
         header = self.header()
         header.setObjectName('TqmHeaderView')
         header.setSortIndicatorShown(True)
-        header.setStretchLastSection(True)
         header.setSectionsMovable(True)
 
         self.load_table_state()
@@ -261,11 +262,15 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
         elif task.state.is_failed:
             add_actions(task.actions, TaskActionVisibility.ON_FAILED)
 
-            if isinstance(task, TaskExecutable) and not task.parent:
-                retry = menu.addAction('Retry')
-                retry.triggered.connect(lambda: self.selected_task_retried.emit(task))
+        if (task.state.is_failed or task.state.is_cancelled) and isinstance(task, TaskExecutable) and not task.parent:
+            retry = menu.addAction('Retry')
+            retry.triggered.connect(lambda: self.selected_task_retried.emit(task))
 
         menu.addSeparator()
+
+        state = task.state
+        if state.is_running or state.is_waiting or state.is_blocked or state.is_retrying:
+            menu.addAction('Stop selected').triggered.connect(self.selected_task_cancelled.emit)
 
         if task.state.is_removable:
             menu.addAction('Remove selected').triggered.connect(self.selected_task_removed.emit)
@@ -309,11 +314,17 @@ class TaskManagerView(QWidget):
         table_widget = Frame()
         table_widget.setLayout(table_layout)
 
-        splitter = QSplitter()
+        self._splitter = splitter = QSplitter()
         splitter.addWidget(table_widget)
         splitter.addWidget(self._debug_widget)
         if os.getenv('DEV_MODE') != '1':
             splitter.setSizes([100, 0])
+
+        # Not saved: the debug panel is a dev tool and starts closed.
+        show_debug = self.toolbar.view_menu.show_debug
+        show_debug.setChecked(os.getenv('DEV_MODE') == '1')
+        show_debug.toggled.connect(self._on_show_debug)
+        splitter.splitterMoved.connect(lambda: show_debug.setChecked(splitter.sizes()[1] > 0))
 
         layout = QVBoxLayout()
         layout.addWidget(splitter)
@@ -324,6 +335,14 @@ class TaskManagerView(QWidget):
         # Closing the bar clears the search, so no hidden filter stays on.
         if not shown:
             self.toolbar.search_bar.clear()
+
+    @Slot(bool)
+    def _on_show_debug(self, show: bool) -> None:
+        sizes = self._splitter.sizes()
+        if show == (sizes[1] > 0):
+            return
+        total = sum(sizes)
+        self._splitter.setSizes([total * 7 // 10, total - total * 7 // 10] if show else [total, 0])
 
     @Slot(QModelIndex)
     def _on_toggle_debug(self, index: QModelIndex) -> None:

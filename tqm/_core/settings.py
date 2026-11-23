@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import json
-from typing import Any, Dict, Literal, Generator
+from typing import Any, Dict, List, Literal, Generator
 from pathlib import Path
 from contextlib import contextmanager
 from dataclasses import field, asdict, dataclass
@@ -63,6 +63,8 @@ class Settings:
     max_workers: int = 20
     enable_debug: bool = False
     wrap_lines: bool = True
+    # Tree and log panel heights; the splitter scales them to the window.
+    splitter_sizes: List[int] = field(default_factory=lambda: [70, 30])
     view: Dict[str, Any] = field(default_factory=dict[str, Any], repr=False)
 
 

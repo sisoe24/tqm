@@ -29,7 +29,7 @@ from mutations import MUTANTS, Mutant
 REPO = Path(__file__).resolve().parents[2]
 OUTPUT = REPO / 'tmp' / 'mutation'
 
-MIN_KILLED = 150
+MIN_KILLED = 174
 RERUNS = 2
 RERUN_LIMIT = 5
 ALARM_SECONDS = 300

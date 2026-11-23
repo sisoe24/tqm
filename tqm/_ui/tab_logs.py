@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import html
+import heapq
 import logging
-from typing import Dict, Optional
+import itertools
+from typing import Set, Dict, Deque, Tuple, Iterable, Optional
 from pathlib import Path
+from collections import deque
 
 from PySide2.QtCore import Qt, QDir, Slot, QPoint, QDateTime
 from PySide2.QtWidgets import (QAction, QWidget, QFileDialog, QVBoxLayout,
                                QPlainTextEdit)
 
 from ..utils import RandomColor
+from .._core.task import TaskUnit, TaskGroup
 from .font_loader import get_monospace_font
 from .._core.logger import WidgetLogHandler
 from .._core.settings import open_settings
@@ -22,6 +26,10 @@ LOG_COLORS = {
     'CRITICAL': '#d500f9',  # Purple
     'USER':     '#81da27',  # Purple
 }
+
+# shortcut: buffers live until Clear, so memory grows with the number of tasks; drop a
+# task's buffer on removal if long sessions with many tasks become a problem.
+RECORDS_PER_TASK = 1000
 
 
 class TasksLog(QWidget):
@@ -73,7 +81,13 @@ class TasksLog(QWidget):
             max_value=220,
             exclude_colors=list(LOG_COLORS.values())
         )
-        self._thread_colors: Dict[str, str] = {}
+        self._task_colors: Dict[str, str] = {}
+
+        # Task id ('' for lines without a task) to (sequence, html line), so a busy task
+        # cannot push the lines of the others out.
+        self._records: Dict[str, Deque[Tuple[int, str]]] = {}
+        self._sequence = itertools.count()
+        self._shown_tasks: Optional[Set[str]] = None  # None shows every line
 
     def _on_contextMenuEvent(self, point: QPoint) -> None:
 
@@ -119,16 +133,43 @@ class TasksLog(QWidget):
 
     @Slot()
     def on_clear_logs(self) -> None:
+        self._records.clear()
         self._logs.clear()
 
-    def log(self, text: str, level_name: str = 'INFO', thread: str = '') -> None:
+    def show_tasks(self, tasks: Iterable[TaskUnit]) -> None:
+        """Show only the lines of `tasks` and their children, or every line if `tasks` is empty."""
+        task_ids: Set[str] = set()
+        for task in tasks:
+            task_ids.add(str(task.id))
+            if isinstance(task, TaskGroup):
+                task_ids.update(str(child.id) for child in task.tasks)
+        self._shown_tasks = task_ids or None
+
+        buffers = [
+            records for task_id, records in self._records.items()
+            if self._shown_tasks is None or task_id in self._shown_tasks
+        ]
+        self._logs.setUpdatesEnabled(False)
+        self._logs.clear()
+        # Only the newest lines fit the panel; appending the rest is wasted work.
+        for _, line in deque(heapq.merge(*buffers), maxlen=self._logs.maximumBlockCount()):
+            self._logs.appendHtml(line)
+        self._logs.setUpdatesEnabled(True)
+        self._scroll_to_end()
+
+    def _scroll_to_end(self) -> None:
+        self._logs.verticalScrollBar().setValue(
+            self._logs.verticalScrollBar().maximum()
+        )
+
+    def log(self, text: str, level_name: str = 'INFO', task_id: str = '') -> None:
         # TODO: Add a no color flag?
 
         # Escape first: the text is plain, but the view adds color with html.
         text = html.escape(text).replace(' ', '&nbsp;').replace('\n', '<br>')
 
-        if thread not in self._thread_colors:
-            self._thread_colors[thread] = self._random_color.generate().name()
+        if task_id not in self._task_colors:
+            self._task_colors[task_id] = self._random_color.generate().name()
 
         # use a different color for the log level
         log_level_color = LOG_COLORS[level_name] if level_name in LOG_COLORS else 'white'
@@ -136,7 +177,10 @@ class TasksLog(QWidget):
         parts[1] = f'<font color="{log_level_color}">{parts[1]}</font>'
         text = '|'.join(parts)
 
-        self._logs.appendHtml(f'<font color="{self._thread_colors[thread]}">{text}</font>')
-        self._logs.verticalScrollBar().setValue(
-            self._logs.verticalScrollBar().maximum()
-        )
+        line = f'<font color="{self._task_colors[task_id]}">{text}</font>'
+        records = self._records.setdefault(task_id, deque(maxlen=RECORDS_PER_TASK))
+        records.append((next(self._sequence), line))
+
+        if self._shown_tasks is None or task_id in self._shown_tasks:
+            self._logs.appendHtml(line)
+            self._scroll_to_end()

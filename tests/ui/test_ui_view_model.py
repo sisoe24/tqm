@@ -37,3 +37,19 @@ def test_get_selected_items(qtbot: QtBot, app: TQManager):
     assert unselected.item not in selected_tasks
 
     assert isinstance(task1.item.data(Qt.UserRole), TaskExecutable)
+
+
+
+def test_last_column_is_not_stretched(qtbot: QtBot, app: TQManager):
+    # A stretched last column absorbs every resize of the other columns; dragging one wider
+    # shrinks it to a few pixels, and the horizontal scroll stops before it.
+    view = app.findChild(TaskTreeView)
+    app.show()
+    qtbot.wait_exposed(app)
+    app.resize(2400, 300)
+    qtbot.wait_until(lambda: view.viewport().width() > 2000)
+
+    header = view.header()
+    last = header.logicalIndex(header.count() - 1)
+
+    assert header.sectionSize(last) == 250

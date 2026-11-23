@@ -63,3 +63,17 @@ def test_exponential_backoff(attempt: int, expected: int):
 def test_factories_pick_their_strategy():
     assert isinstance(linear_retry(1, 1).delay_strategy, LinearBackoff)
     assert exponential_retry(3, 1, 60).delay_strategy.get_delay(3) == 8
+
+
+def test_conditional_policy_stops_at_max_attempts():
+    policy = ConditionalRetryPolicy(1, FixedDelay(0), lambda e: True)
+    policy.attempt = 1
+
+    assert policy.should_retry(context(ValueError())) == RetryStatus.FAIL
+
+
+def test_exception_policy_stops_at_max_attempts():
+    policy = ExceptionBasedRetryPolicy(1, FixedDelay(0), retry_on=[ValueError])
+    policy.attempt = 1
+
+    assert policy.should_retry(context(ValueError())) == RetryStatus.FAIL

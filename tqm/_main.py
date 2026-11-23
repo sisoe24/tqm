@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Callable, Optional, Generator
 from contextlib import contextmanager
 
 from PySide2.QtCore import Qt
-from PySide2.QtWidgets import QWidget, QSplitter, QMainWindow, QMessageBox
+from PySide2.QtWidgets import QWidget, QMainWindow, QMessageBox
 
 from ._core.task import TaskUnit, TaskGroup, TaskExecutable
 from ._core.logger import LOGGER, USER_LEVEL, remove_handlers, add_file_handler
 from ._ui.tab_logs import TasksLog
+from ._ui.log_splitter import LogSplitter
 from ._core.settings import get_qss_path, open_settings, get_config_path
 from ._ui.ui_controller import TaskManagerController, _TaskButtonsController
 from ._ui.ui_view_model import TaskManagerView
@@ -77,13 +77,15 @@ class TQManager(QMainWindow):
 
         self._controller = TaskManagerController(self._view, self.executor, settings_path, self)
         self._controller.ops.max_workers_updated.connect(self.executor.set_max_workers)
+        self._view.tree_view.selectionModel().selectionChanged.connect(
+            lambda: self._logs.show_tasks(self._controller.get_selected_tasks())
+        )
 
-        splitter = QSplitter(Qt.Vertical)
-        splitter.addWidget(self._view)
-        splitter.addWidget(self._logs)
-
-        if os.getenv('DEV_MODE') != '1':
-            splitter.setSizes([100, 0])
+        splitter = LogSplitter(self._view, self._logs, settings_path)
+        show_log = self._view.toolbar.view_menu.show_log
+        show_log.setChecked(splitter.is_log_shown())
+        show_log.toggled.connect(splitter.show_log)
+        splitter.log_shown.connect(show_log.setChecked)
 
         self.setCentralWidget(splitter)
 
@@ -109,6 +111,16 @@ class TQManager(QMainWindow):
     def remove_tasks(self, *tasks: TaskUnit) -> None:
         for task in tasks:
             self.executor.remove_task(task)
+
+    def cancel_tasks(self, *tasks: TaskUnit) -> None:
+        """Stop tasks. Tasks that have not started end cancelled at once.
+
+        A running task cannot be killed: its callable must check `task.cancel_requested`
+        or register a hook with `task.on_cancel`, for example to stop a subprocess.
+        Until it returns, the task stays running.
+        """
+        for task in tasks:
+            self.executor.cancel_task(task)
 
     def log(self, text: str) -> None:
         """Write a message to this manager's log panel and log file.

@@ -135,3 +135,11 @@ def test_qss_path_keeps_the_user_file(tmp_path: Path, monkeypatch: pytest.Monkey
     (tmp_path / 'style.qss').write_text('mine')
 
     assert get_qss_path(tmp_path).read_text() == 'mine'
+
+
+def test_corrupt_file_resets_to_defaults(tmp_path: Path):
+    f = tmp_path / 'settings.json'
+    f.write_text('{not json')
+
+    with open_settings(json_file_path=f) as s:
+        assert s == Settings()

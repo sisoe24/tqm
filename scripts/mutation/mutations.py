@@ -21,7 +21,13 @@ CALLBACKS = 'tqm/_core/task_callbacks.py'
 BUILDER = 'tqm/_core/task_builder.py'
 SETTINGS = 'tqm/_core/settings.py'
 CONTROLLER = 'tqm/_ui/ui_controller.py'
+VIEW_MODEL = 'tqm/_ui/ui_view_model.py'
+MULTI_SELECT = 'tqm/_ui/mixins/multi_select_mixin.py'
+DEBUG_WIDGET = 'tqm/_ui/debug_widget.py'
+FONT_LOADER = 'tqm/_ui/font_loader.py'
 TASK_BASE = 'tqm/_core/task_base.py'
+RUN_PROCESS = 'tqm/utils/run_process.py'
+VIEW_MIXIN = 'tqm/_ui/mixins/view_mixin.py'
 TASK = 'tqm/_core/task.py'
 
 
@@ -38,10 +44,13 @@ MUTANTS = [
     Mutant(
         EXECUTOR,
         (
-            'if self.retry_handler.handle_failure(task, exception):\n'
-            '            return'
+            'if self._shutting_down() or not self.retry_handler.handle_failure(task, exception):\n'
+            '            self._fail_task(task, exception)'
         ),
-        'self.retry_handler.handle_failure(task, exception)',
+        (
+            'self.retry_handler.handle_failure(task, exception)\n'
+            '        self._fail_task(task, exception)'
+        ),
         'failure: ignore retry decision, always finalize',
     ),
     Mutant(
@@ -65,8 +74,8 @@ MUTANTS = [
     Mutant(
         EXECUTOR,
         (
-            'for child in filter(lambda t: t.state.is_blocked, task.children):\n'
-            "            self._on_task_failed(child, TaskParentError(f'Parent {task.name} failed.'))"
+            'if child.state.is_waiting or child.state.is_blocked or child.state.is_retrying:\n'
+            "                self._fail_task(child, TaskParentError(f'Parent {task.name} failed.'))"
         ),
         'pass',
         'failure: no cascade to blocked children',
@@ -74,8 +83,9 @@ MUTANTS = [
     Mutant(
         EXECUTOR,
         (
-            'if self.queue.is_task_deferred(task):\n'
-            '            self.queue.remove_from_deferred(task)'
+            '# A task blocked by its predicate waits in the deferred queue.\n'
+            '        with contextlib.suppress(TaskNotFoundError):\n'
+            '            self.queue.remove_task(task)'
         ),
         'pass',
         'failure: leave failed task in deferred queue',
@@ -188,26 +198,27 @@ MUTANTS = [
     Mutant(
         EXECUTOR,
         (
-            '            if task not in self.registry:\n'
-            '                self.add_task(task)'
+            'if member not in self.registry:\n'
+            '                self._register(member)\n'
+            '            elif member.state.is_inactive:\n'
+            '                self._initialize_task(member)'
         ),
-        '            self.add_task(task)',
+        'self._register(member)',
         'group add: no registry guard',
     ),
     Mutant(
         EXECUTOR,
         (
-            '                self.add_task(task)\n'
-            '\n'
+            'self._settle_group(group)\n'
             '        self.start_workers()'
         ),
-        '                self.add_task(task)',
+        'self._settle_group(group)',
         'group add: no start_workers after adding group tasks',
     ),
     Mutant(
         EXECUTOR,
         (
-            'if self._is_shutting_down:\n'
+            'if self._shutting_down():\n'
             "            LOGGER.warning('Task manager is shutting down. Cannot add new task')\n"
             '            return task'
         ),
@@ -244,8 +255,7 @@ MUTANTS = [
     Mutant(
         EXECUTOR,
         (
-            'if self._blocker.should_block(task):\n'
-            "            LOGGER.info(f'{task.name} is on hold')\n"
+            'if not self._predicate_passes(task):\n'
             '            return'
         ),
         'pass',
@@ -253,28 +263,23 @@ MUTANTS = [
     ),
     Mutant(
         EXECUTOR,
-        'while self.queue.size() and self._threadpool.activeThreadCount() <= self.max_workers:',
+        'while self.queue.size() and self._has_free_worker():',
         'while self.queue.size():',
         'start: no worker-cap check',
     ),
     Mutant(
         EXECUTOR,
-        'while self.queue.size() and self._threadpool.activeThreadCount() <= self.max_workers:',
-        'if self.queue.size() and self._threadpool.activeThreadCount() <= self.max_workers:',
+        'while self.queue.size() and self._has_free_worker():',
+        'if self.queue.size() and self._has_free_worker():',
         'start: start only one task per call',
     ),
     Mutant(
         EXECUTOR,
         (
-            'self._threadpool.setMaxThreadCount(self.max_workers+1)\n'
-            '\n'
-            '    def _predicate'
+            'self.max_workers = value\n'
+            '        self._threadpool.setMaxThreadCount(self.max_workers)'
         ),
-        (
-            'pass\n'
-            '\n'
-            '    def _predicate'
-        ),
+        'self.max_workers = value',
         'set_max_workers: threadpool not resized',
     ),
     Mutant(
@@ -287,7 +292,7 @@ MUTANTS = [
         EXECUTOR,
         (
             'self.queue.promote_to_main(task)\n'
-            '        self.start_workers()'
+            '            self.start_workers()'
         ),
         'self.queue.promote_to_main(task)',
         'predicate success: no start_workers',
@@ -307,7 +312,7 @@ MUTANTS = [
     Mutant(
         EXECUTOR,
         (
-            'if task not in self.registry:\n'
+            'if not task.state.is_inactive and task not in self.registry:\n'
             '            return'
         ),
         'pass',
@@ -355,15 +360,23 @@ MUTANTS = [
     ),
     Mutant(
         EXECUTOR,
-        "task.reset('Reset & Retry')",
-        'pass',
+        (
+            "task.reset('Reset & Retry', reset_attempts=True)\n"
+            '\n'
+            '        # Reset members'
+        ),
+        (
+            'pass\n'
+            '\n'
+            '        # Reset members'
+        ),
         'retry: no reset',
     ),
     Mutant(
         EXECUTOR,
         (
             'for child in task.children.copy():\n'
-            '            if child.state.is_failed:\n'
+            '            if child.state.is_failed or child.state.is_cancelled:\n'
             '                self.retry_task(child)'
         ),
         'pass',
@@ -379,7 +392,7 @@ MUTANTS = [
         EXECUTOR,
         (
             'self._initialize_task(task)\n'
-            '        self._start_worker()'
+            '            self._start_task(task)'
         ),
         'self._initialize_task(task)',
         'retry: no worker kick',
@@ -387,41 +400,27 @@ MUTANTS = [
     Mutant(
         EXECUTOR,
         (
-            'if not self.status_tracker.running_tasks:\n'
-            '            return'
-        ),
-        'pass',
-        'shutdown: no idle early return',
-    ),
-    Mutant(
-        EXECUTOR,
-        (
-            'while self.queue.size():\n'
-            '            self.queue.dequeue()'
+            'for task in sorted(pending, key=_depth, reverse=True):\n'
+            '            if task in self.registry:\n'
+            '                self._drop(task)'
         ),
         'pass',
         'shutdown: queue not drained',
     ),
     Mutant(
         EXECUTOR,
-        'self._is_shutting_down = True\n',
-        'pass\n',
+        'self._shutdown_requested = True',
+        'self._shutdown_requested = False',
         'shutdown: flag never set',
     ),
     Mutant(
         EXECUTOR,
         (
-            'self._shutdown_thread.run()\n'
-            '        self._is_shutting_down = False'
+            'if self._shutdown_requested and self.status_tracker.is_idle():\n'
+            '            self._shutdown_requested = False'
         ),
-        'self._shutdown_thread.run()',
+        'pass',
         'shutdown: flag stuck True forever',
-    ),
-    Mutant(
-        EXECUTOR,
-        'self._shutdown_thread.run()\n',
-        'pass\n',
-        'shutdown: does not wait for workers',
     ),
     Mutant(
         EXECUTOR,
@@ -481,30 +480,19 @@ MUTANTS = [
     ),
     Mutant(
         EXECUTOR,
-        'task.predicate.evaluate(partial(self._handle_predicate, task))',
+        'predicate.evaluate(partial(self._on_predicate_event, task))',
         'pass',
         'blocker: predicate never polled',
     ),
     Mutant(
         EXECUTOR,
-        (
-            'if self._block_task_with_parent(task):\n'
-            '            self._executor.queue.suspend(task)\n'
-            '            return True'
-        ),
-        'pass',
+        'if parent and not parent.state.is_completed:',
+        'if False:',
         'blocker: parent ignored',
     ),
     Mutant(
         EXECUTOR,
-        'if not task.parent.state.is_completed and not task.state.is_inactive:',
-        'if not task.parent.state.is_completed:',
-        'blocker: inactive check removed',
-        equivalent='a blocked child is not inactive when the parent is unfinished',
-    ),
-    Mutant(
-        EXECUTOR,
-        'self.predicate_failed.emit(task, TaskPredicateError(task.name))',
+        'self._on_task_failed(task, TaskPredicateError(f\'{task.name}: {error or "predicate failed"}\'))',
         'pass',
         'predicate fail: no failure emitted',
     ),
@@ -515,50 +503,38 @@ MUTANTS = [
         'predicate retry: no RETRYING state',
     ),
     Mutant(
-        RUNNER,
-        'if all(task.state.is_completed for task in self.group.tasks):',
-        'if any(task.state.is_completed for task in self.group.tasks):',
+        EXECUTOR,
+        'if all(t.state.is_completed for t in members):',
+        'if any(t.state.is_completed for t in members):',
         'group: complete if ANY task completed',
     ),
     Mutant(
-        RUNNER,
-        "self.signals.runner_failed.emit(self.group, TaskEventError('Some tasks failed'))",
+        EXECUTOR,
+        "self._handle_failure(group, TaskEventError('Some tasks failed'))",
         'pass',
         'group: failure not emitted',
     ),
     Mutant(
-        RUNNER,
-        'while not all(task.state.is_completed or task.state.is_failed for task in self.group.tasks):',
-        'while not all(task.state.is_completed for task in self.group.tasks):',
+        EXECUTOR,
+        'if not all(t.state.is_completed or t.state.is_failed or t.state.is_cancelled for t in members):',
+        'if not all(t.state.is_completed or t.state.is_cancelled for t in members):',
         'group: waits forever on failed task',
     ),
     Mutant(
         RUNNER,
-        'self.signals.runner_started.emit(self.group)',
-        'pass',
-        'group: no started emit',
-    ),
-    Mutant(
-        RUNNER,
-        'self.signals.runner_started.emit(self.task)',
-        'pass',
-        'task: no started emit',
-    ),
-    Mutant(
-        RUNNER,
-        'except Exception as e:',
+        'except BaseException as e:',
         'except ValueError as e:',
         'task runner: only catches ValueError',
     ),
     Mutant(
         RUNNER,
-        'self.signals.runner_failed.emit(self.task, e)',
+        'self.task.signals.runner_failed.emit(self.task, e)',
         'pass',
         'task runner: failure swallowed',
     ),
     Mutant(
         RUNNER,
-        'self.signals.runner_completed.emit(self.task)',
+        'self.task.signals.runner_completed.emit(self.task)',
         'pass',
         'task runner: completion swallowed',
     ),
@@ -655,27 +631,9 @@ MUTANTS = [
         'delete: stays in group.tasks',
     ),
     Mutant(
-        TASK,
-        (
-            'super().reset(comment, reset_attempts)\n'
-            '        self.runner = TaskRunner(self)'
-        ),
-        'super().reset(comment, reset_attempts)',
-        'reset: reuses auto-deleted TaskRunner',
-    ),
-    Mutant(
-        TASK,
-        (
-            'super().reset(comment, reset_attempts)\n'
-            '        self.runner = GroupRunner(self)'
-        ),
-        'super().reset(comment, reset_attempts)',
-        'reset: reuses auto-deleted GroupRunner',
-    ),
-    Mutant(
         STATE,
-        'self.is_completed, self.is_failed\n',
-        'self.is_failed\n',
+        'self.is_completed, self.is_failed, self.is_cancelled, self.is_blocked, self.is_retrying',
+        'self.is_failed, self.is_cancelled, self.is_blocked, self.is_retrying',
         'is_removable: completed not removable',
     ),
     Mutant(
@@ -683,12 +641,6 @@ MUTANTS = [
         'self.is_waiting, self.is_deleted, self.is_inactive,',
         'self.is_deleted, self.is_inactive,',
         'is_removable: waiting not removable',
-    ),
-    Mutant(
-        STATE,
-        'self.is_running, self.is_retrying, self.is_blocked,',
-        'self.is_running,',
-        'is_active: only running',
     ),
     Mutant(
         STATE,
@@ -755,18 +707,18 @@ MUTANTS = [
     ),
     Mutant(
         POLICY,
-        'return RetryStatus.SUCCESS if self.condition() else RetryStatus.RETRY',
-        'return RetryStatus.RETRY if self.condition() else RetryStatus.SUCCESS',
+        'return RetryStatus.RETRY if self.condition(context.exception) else RetryStatus.FAIL',
+        'return RetryStatus.FAIL if self.condition(context.exception) else RetryStatus.RETRY',
         'Conditional retry inverted',
     ),
     Mutant(
         POLICY,
         (
-            'except Exception as e:\n'
+            'except Exception:\n'
             '            return RetryStatus.FAIL'
         ),
         (
-            'except Exception as e:\n'
+            'except Exception:\n'
             '            return RetryStatus.RETRY'
         ),
         'Conditional: raising condition retries',
@@ -783,7 +735,7 @@ MUTANTS = [
     Mutant(
         POLICY,
         (
-            'if self._matches_exception_list(context.exception, self.retry_on):\n'
+            'if not self.retry_on or self._matches_exception_list(context.exception, self.retry_on):\n'
             '            return RetryStatus.RETRY\n'
             '\n'
             '        return RetryStatus.FAIL'
@@ -849,7 +801,7 @@ MUTANTS = [
     Mutant(
         PREDICATE,
         (
-            'self.stop_timer()\n'
+            'self.stop()\n'
             '                predicate_handler(PredicateEventType.FAIL)'
         ),
         'predicate_handler(PredicateEventType.FAIL)',
@@ -858,10 +810,10 @@ MUTANTS = [
     Mutant(
         PREDICATE,
         (
-            'self.delete()\n'
-            '                predicate_handler(PredicateEventType.SUCCESS)'
+            'self.stop()\n'
+            '                self.passed = True'
         ),
-        'predicate_handler(PredicateEventType.SUCCESS)',
+        'self.passed = True',
         'predicate: timer keeps firing after SUCCESS',
     ),
     Mutant(
@@ -878,6 +830,7 @@ MUTANTS = [
         PREDICATE,
         (
             'self.retry_left = self.max_retries\n'
+            '        self.passed = False\n'
             '\n'
             '    def delete'
         ),
@@ -929,21 +882,18 @@ MUTANTS = [
     ),
     Mutant(
         BUILDER,
-        'retry_policy=self.retry_policy,',
+        'retry_policy=copy.copy(self.retry_policy),',
         '',
         'builder: retry policy dropped on build',
     ),
     Mutant(
         BUILDER,
         (
-            'parent=self.parent,\n'
-            '            color=self.color,\n'
-            '            data=self.data,'
+            'color=self.color,\n'
+            '            # Copies, so tasks built from one builder or policy do not share attempts or data.\n'
+            '            data=dict(self.data),'
         ),
-        (
-            'parent=self.parent,\n'
-            '            color=self.color,'
-        ),
+        'color=self.color,',
         'builder: data dropped',
     ),
     Mutant(
@@ -1053,23 +1003,25 @@ MUTANTS = [
         SETTINGS,
         (
             'except Exception as e:\n'
-            "        print('[tqm error]: Invalid settings file. Resetting settings.', e)\n"
-            '        settings = Settings()'
+            "        print('[tqm error]: Invalid settings file. Resetting settings.', e)"
         ),
         (
             'except ZeroDivisionError as e:\n'
-            '        settings = Settings()'
+            "        print('[tqm error]: Invalid settings file. Resetting settings.', e)"
         ),
         'open_settings: corrupt file crashes',
     ),
     Mutant(
         SETTINGS,
         (
-            'settings = Settings()\n'
+            'except FileNotFoundError:\n'
             "        with json_file_path.open('w') as f:\n"
             '            json.dump(asdict(settings), f, indent=4)'
         ),
-        'settings = Settings()',
+        (
+            'except FileNotFoundError:\n'
+            '        pass'
+        ),
         'open_settings: default not written',
     ),
     Mutant(
@@ -1112,29 +1064,20 @@ MUTANTS = [
     ),
     Mutant(
         CONTROLLER,
-        (
-            'if task.state.is_completed:\n'
-            '                self._executor.remove_task(task)'
-        ),
-        'self._executor.remove_task(task)',
+        't for t in self._controller.get_all_tasks() if t.state.is_completed)',
+        't for t in self._controller.get_all_tasks())',
         'clear_completed: removes everything',
     ),
     Mutant(
         CONTROLLER,
-        (
-            'if task.state.is_failed:\n'
-            '                self._executor.remove_task(task)'
-        ),
-        'self._executor.remove_task(task)',
+        't for t in self._controller.get_all_tasks() if t.state.is_failed)',
+        't for t in self._controller.get_all_tasks())',
         'clear_failed: removes everything',
     ),
     Mutant(
         CONTROLLER,
-        (
-            'if task.state.is_waiting:\n'
-            '                self._executor.remove_task(task)'
-        ),
-        'self._executor.remove_task(task)',
+        't for t in self._controller.get_all_tasks() if t.state.is_waiting)',
+        't for t in self._controller.get_all_tasks())',
         'clear_waiting: removes everything',
     ),
     Mutant(
@@ -1146,7 +1089,7 @@ MUTANTS = [
     Mutant(
         CONTROLLER,
         (
-            "with open_settings('w') as s:\n"
+            "with open_settings('w', json_file_path=self._settings_path) as s:\n"
             '            s.max_workers = value'
         ),
         'pass',
@@ -1184,19 +1127,15 @@ MUTANTS = [
     ),
     Mutant(
         CONTROLLER,
-        (
-            'task.runner.signals.task_progress_updated.connect(\n'
-            '            partial(self._on_task_update_progress, task)\n'
-            '        )'
-        ),
+        'executor.callbacks.task_progress_updated.connect(self._on_task_update_progress)',
         'pass',
         'task progress not wired',
     ),
     Mutant(
-        CONTROLLER,
+        EXECUTOR,
         (
-            'if not group_parent.rowCount():\n'
-            '                self._executor.remove_task(group_parent.data(Qt.UserRole))'
+            'if group is not None and not group.tasks and group.state.is_removable and not group.state.is_deleted:\n'
+            '            self.remove_task(group)'
         ),
         'pass',
         'empty group not removed',
@@ -1216,7 +1155,7 @@ MUTANTS = [
     Mutant(
         CONTROLLER,
         (
-            'for task in self.get_selected_tasks():\n'
+            'if task.state.is_retryable:\n'
             '            self._executor.retry_task(task)'
         ),
         'pass',
@@ -1224,10 +1163,7 @@ MUTANTS = [
     ),
     Mutant(
         CONTROLLER,
-        (
-            'for task in self.get_selected_tasks():\n'
-            '            self._executor.remove_task(task)'
-        ),
+        'self.remove_tasks(self.get_selected_tasks())',
         'pass',
         'remove selected no-op',
     ),
@@ -1248,5 +1184,442 @@ MUTANTS = [
         'view.toolbar.retry_all_btn.clicked.connect(self.retry_all_failed)',
         'pass',
         'retry-all button unwired',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'self._check_removable(task)\n'
+            '\n'
+            '        if task.state.is_inactive:'
+        ),
+        'if task.state.is_inactive:',
+        'remove: no removable check before removing',
+    ),
+    Mutant(
+        EXECUTOR,
+        "for other in (*task.children, *getattr(task, 'tasks', ())):",
+        "for other in getattr(task, 'tasks', ()):",
+        'remove check: running child ignored',
+    ),
+    Mutant(
+        EXECUTOR,
+        "for other in (*task.children, *getattr(task, 'tasks', ())):",
+        'for other in task.children:',
+        'remove check: running group member ignored',
+    ),
+    Mutant(
+        EXECUTOR,
+        'pending = [t for t in self.registry if t.state.is_waiting or t.state.is_blocked or t.state.is_retrying]',
+        'pending = [t for t in self.registry if t.state.is_waiting or t.state.is_blocked]',
+        'shutdown: retrying tasks kept',
+    ),
+    Mutant(
+        EXECUTOR,
+        'for task in sorted(pending, key=_depth, reverse=True):',
+        'for task in sorted(pending, key=_depth):',
+        'shutdown: parents dropped before children',
+        equivalent='dropping a parent takes its pending children along, and the loop skips dropped tasks',
+    ),
+    Mutant(
+        EXECUTOR,
+        'if self._shutting_down() or not self.retry_handler.handle_failure(task, exception):',
+        'if not self.retry_handler.handle_failure(task, exception):',
+        'shutdown: running tasks still retry',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if self._shutting_down():\n'
+            "            LOGGER.warning('Task manager is shutting down. Cannot retry task')\n"
+            '            return'
+        ),
+        'pass',
+        'shutdown: retry_task accepted',
+    ),
+    Mutant(
+        EXECUTOR,
+        'if parent and parent.state.is_failed:',
+        'if False:',
+        'dispatch: child of failed parent runs',
+    ),
+    Mutant(
+        EXECUTOR,
+        'if parent and not self._is_known(parent):',
+        'if False:',
+        'dispatch: unknown parent waits forever',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if task in self._policy_retries:\n'
+            '            self._policy_retries.discard(task)\n'
+            '        else:\n'
+            '            task.callbacks.execute_on_start(task)'
+        ),
+        'task.callbacks.execute_on_start(task)',
+        'policy retry: on_start fires again',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if not task.state.is_retrying:\n'
+            '            return\n'
+            '\n'
+            "        task.reset('Retry')"
+        ),
+        "task.reset('Retry')",
+        'retry due: no state guard',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if not (task.state.is_blocked or task.state.is_retrying):\n'
+            '            return'
+        ),
+        'pass',
+        'predicate event: stale timer acts on task',
+        equivalent='every path that ends a predicate wait stops its timer first',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if task.state.is_deleted:\n'
+            '            raise TaskError(f\'Task "{task}" was removed and cannot be added again\')'
+        ),
+        'pass',
+        'add: removed task accepted',
+    ),
+    Mutant(
+        EXECUTOR,
+        'if threading.get_ident() != self._thread_id:',
+        'if False:',
+        'thread check removed',
+    ),
+    Mutant(
+        POLICY,
+        (
+            'if self.attempt >= self.max_attempts:\n'
+            '            return RetryStatus.FAIL\n'
+            '\n'
+            '        try:'
+        ),
+        'try:',
+        'Conditional: no attempt cap',
+    ),
+    Mutant(
+        POLICY,
+        (
+            'if self.attempt >= self.max_attempts:\n'
+            '            return RetryStatus.FAIL\n'
+            '\n'
+            '        # Never'
+        ),
+        '# Never',
+        'ExceptionBased: no attempt cap',
+    ),
+    Mutant(
+        POLICY,
+        'if not self.retry_on or self._matches_exception_list(',
+        'if self._matches_exception_list(',
+        'ExceptionBased: empty retry_on retries nothing',
+    ),
+    Mutant(
+        SETTINGS,
+        'if name in asdict(settings) and type(value) is type(getattr(settings, name)):',
+        'if name in asdict(settings):',
+        'open_settings: wrong value type kept',
+    ),
+    Mutant(
+        BUILDER,
+        'retry_policy=copy.copy(self.retry_policy),',
+        'retry_policy=self.retry_policy,',
+        'builder: tasks share one retry policy',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        (
+            'if task.color == TaskBuilder.DEFAULT_COLOR:\n'
+            '                task.color = task_group.color'
+        ),
+        'task.color = task_group.color',
+        'group add: member color overwritten',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        (
+            'if not regexp.isValid():\n'
+            '            regexp = QRegExp(text, Qt.CaseInsensitive, QRegExp.FixedString)'
+        ),
+        'pass',
+        'search: invalid regex not taken literally',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        (
+            'if self._row_matches(parent.row(), parent.parent()):\n'
+            '                return True'
+        ),
+        'pass',
+        'search: children of a match hidden',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        "text_columns = (columns['Task'], columns['Wait for'], columns['Comment'])",
+        "text_columns = (columns['Task'],)",
+        'search: only the Task column',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        'int(part) if part.isdigit() else part.lower()',
+        'part.lower()',
+        'sort: names not in natural order',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        'if not self.selectionModel().isRowSelected(item.row(), item.parent()):',
+        'if False:',
+        'context menu: clicked row not selected',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        (
+            'if not shown:\n'
+            '            self.toolbar.search_bar.clear()'
+        ),
+        'pass',
+        'search: hidden filter stays on',
+    ),
+    Mutant(
+        MULTI_SELECT,
+        (
+            'else:\n'
+            '            self.view.setSelectionMode(QAbstractItemView.SingleSelection)\n'
+            '\n'
+            '        if ('
+        ),
+        (
+            'pass\n'
+            '\n'
+            '        if ('
+        ),
+        'click: multi mode stuck after Shift',
+    ),
+    Mutant(
+        MULTI_SELECT,
+        (
+            "# The view's keyboard search would jump to a row named A and change the selection.\n"
+            '            return'
+        ),
+        'pass',
+        'select all: key A reaches keyboard search',
+    ),
+    Mutant(
+        DEBUG_WIDGET,
+        'self._tasks_table.setSortingEnabled(False)',
+        'pass',
+        'debug table: sorting on while filling',
+    ),
+    Mutant(
+        DEBUG_WIDGET,
+        'sorted(data.items(), key=lambda kv: str(kv[0]))',
+        'sorted(data.items())',
+        'debug tree: mixed key types crash',
+    ),
+    Mutant(
+        FONT_LOADER,
+        (
+            'if user_font:\n'
+            '        return user_font'
+        ),
+        'pass',
+        'font: TQM_MONO_FONT ignored',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if task.cancel_requested:\n'
+            '            self._finish_cancelled(task)\n'
+            '        else:\n'
+            '            self._handle_failure(task, exception)'
+        ),
+        'self._handle_failure(task, exception)',
+        'cancel: a raising cancelled task fails and retries',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if task.cancel_requested:\n'
+            '            self._finish_cancelled(task)\n'
+            '            if autostart:'
+        ),
+        'if False:\n            if autostart:',
+        'cancel: a returning cancelled task completes',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if not state.is_running:\n'
+            '            self._finish_cancelled(task)\n'
+            '            return'
+        ),
+        'pass',
+        'cancel: a waiting task stays queued',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'for member in list(task.tasks):\n'
+            '                self.cancel_task(member)'
+        ),
+        'pass',
+        'cancel: group members keep running',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'for child in task.children.copy():\n'
+            '            self.cancel_task(child)'
+        ),
+        'pass',
+        'cancel: children stay blocked',
+    ),
+    Mutant(
+        EXECUTOR,
+        "any(t.state.is_cancelled for t in members) and not any(t.state.is_failed for t in members)",
+        'False',
+        'cancel: group with a cancelled member fails',
+    ),
+    Mutant(
+        EXECUTOR,
+        (
+            'if parent and parent.state.is_cancelled:\n'
+            '            task._request_cancel()\n'
+            '            self._finish_cancelled(task)\n'
+            '            return'
+        ),
+        'pass',
+        'cancel: child of a cancelled parent dispatched',
+    ),
+    Mutant(
+        EXECUTOR,
+        'if member.state.is_failed or member.state.is_cancelled:',
+        'if member.state.is_failed:',
+        'retry: cancelled group members not reset',
+    ),
+    Mutant(
+        TASK_BASE,
+        (
+            'for hook in hooks:\n'
+            '            self._run_cancel_hook(hook)'
+        ),
+        'pass',
+        'cancel: hooks never run',
+    ),
+    Mutant(
+        TASK_BASE,
+        'self._cancel_hooks.append(hook)\n                return',
+        'pass',
+        'cancel: hook runs at once while not cancelled',
+    ),
+    Mutant(
+        TASK_BASE,
+        (
+            'if self._cancel_requested:\n'
+            '                return False'
+        ),
+        'pass',
+        'cancel: hooks run on every cancel',
+        equivalent='the first cancel empties the hook list, so a second one only logs again',
+    ),
+    Mutant(
+        TASK_BASE,
+        (
+            'try:\n'
+            '            hook()\n'
+            '        except Exception as error:'
+        ),
+        'if True:\n            hook()\n        if False:',
+        'cancel: a raising hook breaks the cancel',
+    ),
+    Mutant(
+        TASK_BASE,
+        (
+            'self._cancel_requested = False\n'
+            '            self._cancel_hooks = []'
+        ),
+        'pass',
+        'cancel: retry keeps the flag',
+    ),
+    Mutant(
+        CONTROLLER,
+        'self._executor.cancel_task(task)',
+        'pass',
+        'ui: Stop does nothing',
+    ),
+    Mutant(
+        VIEW_MODEL,
+        "menu.addAction('Stop selected').triggered.connect(self.selected_task_cancelled.emit)",
+        'pass',
+        'ui: no Stop in the menu',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        "popen_kwargs.setdefault('start_new_session', True)",
+        'pass',
+        'run_process: no own process group, so a stop kills nothing',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'task.on_cancel(on_cancel)',
+        'pass',
+        'run_process: a stop does not kill the process',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'if proc.returncode is None:\n            _stop_in_background(proc)',
+        'if False:\n            _stop_in_background(proc)',
+        'run_process: the cancel hook never kills',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'stderr=subprocess.STDOUT',
+        'stderr=None',
+        'run_process: stderr is not logged',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'tail.append(line)',
+        'pass',
+        'run_process: no output tail on errors',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        "if task.cancel_requested:\n        raise TaskCancelled(f'{task.name} stopped by user')",
+        'pass',
+        'run_process: a stop raises the exit code error',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'if timed_out:',
+        'if False:',
+        'run_process: a timeout raises the exit code error',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'if proc.returncode != 0:',
+        'if False:',
+        'run_process: a failed command passes',
+    ),
+    Mutant(
+        VIEW_MIXIN,
+        'self.__header.setStretchLastSection(False)',
+        'pass',
+        'ui: the last column stretches and scroll stops before it',
+    ),
+    Mutant(
+        CONTROLLER,
+        '        task.item = None\n',
+        '',
+        'ui: a removed task keeps its deleted row',
     ),
 ]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import json
-from typing import Dict, Callable
+from typing import Any, Dict, Callable
 from pathlib import Path
 
 import pytest
@@ -60,7 +60,7 @@ def test_preset_path_variable_is_not_overwritten(name: str, tmp_path: Path, monk
     assert os.environ[name] == preset
 
 
-def test_mono_font_variable_wins_over_the_bundled_font(monkeypatch: pytest.MonkeyPatch):
+def test_mono_font_variable_wins_over_the_bundled_font(qapp: Any, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv('TQM_MONO_FONT', 'Courier New')
     get_monospace_font.cache_clear()
 

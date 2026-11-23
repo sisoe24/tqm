@@ -424,3 +424,48 @@ def test_group_keeps_a_member_color(app: TQManager):
 
     assert colored.color.name() == '#ff0000'
     assert plain.color.name() == '#0000ff'
+
+
+def test_clear_completed_reaches_group_members(qtbot: QtBot, app: TQManager):
+    done = TaskBuilder('Done').build()
+    failed = TaskBuilder('Failed').with_event(raise_error).build()
+    group = TaskGroupBuilder('G').with_tasks(done, failed).build()
+    app.add_tasks(group)
+    app.start_workers()
+    qtbot.wait_until(lambda: group.state.is_failed)
+
+    app.operations.clear_completed_tasks()
+
+    assert done.state.is_deleted
+    assert row_names(app.findChild(TaskTreeView)) == {'G', 'Failed'}
+
+
+def test_stop_selected_cancels_and_shows_stopping(qtbot: QtBot, app: TQManager, gate):
+    release = gate()
+    task = TaskBuilder('Running').with_event(lambda t: release.wait(5)).build()
+    app.add_tasks(task)
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_running)
+
+    view = app.findChild(TaskTreeView)
+    select_task(view, 'Running')
+    view.selected_task_cancelled.emit()
+
+    assert task.cancel_requested
+    assert cell_data(view, 'Running', 'Last message') == 'Stopping...'
+
+    release.set()
+    qtbot.wait_until(lambda: task.state.is_cancelled)
+
+
+def test_removed_task_that_logs_does_not_touch_its_deleted_row(qtbot: QtBot, app: TQManager):
+    # A thread the callable started can log after the task is removed.
+    task = TaskBuilder('Removed').build()
+    app.add_tasks(task)
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_completed)
+    app.remove_tasks(task)
+
+    task.log('late line')  # the signal is direct on this thread
+
+    assert task.item is None
