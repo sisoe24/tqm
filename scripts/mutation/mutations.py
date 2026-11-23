@@ -1616,4 +1616,10 @@ MUTANTS = [
         'pass',
         'ui: the last column stretches and scroll stops before it',
     ),
+    Mutant(
+        CONTROLLER,
+        '        task.item = None\n',
+        '',
+        'ui: a removed task keeps its deleted row',
+    ),
 ]

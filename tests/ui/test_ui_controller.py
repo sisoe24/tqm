@@ -456,3 +456,17 @@ def test_stop_selected_cancels_and_shows_stopping(qtbot: QtBot, app: TQManager, 
 
     release.set()
     qtbot.wait_until(lambda: task.state.is_cancelled)
+
+
+def test_removed_task_that_logs_does_not_touch_its_deleted_row(qtbot: QtBot, app: TQManager):
+    # A thread the callable started can log after the task is removed.
+    task = TaskBuilder('Removed').build()
+    app.add_tasks(task)
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_completed)
+    app.remove_tasks(task)
+
+    task.log('late line')
+    qtbot.wait(50)
+
+    assert task.item is None

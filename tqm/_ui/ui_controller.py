@@ -233,6 +233,9 @@ class TaskManagerController(QObject):
         else:
             self.view.tree_view.tasks_model.removeRow(remove_row)
 
+        # The row is deleted; a late task.log must not reach it.
+        task.item = None
+
     @Slot()
     def _on_cancel_selected(self) -> None:
         for task in self.get_selected_tasks():
