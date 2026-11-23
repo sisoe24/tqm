@@ -466,7 +466,6 @@ def test_removed_task_that_logs_does_not_touch_its_deleted_row(qtbot: QtBot, app
     qtbot.wait_until(lambda: task.state.is_completed)
     app.remove_tasks(task)
 
-    task.log('late line')
-    qtbot.wait(50)
+    task.log('late line')  # the signal is direct on this thread
 
     assert task.item is None

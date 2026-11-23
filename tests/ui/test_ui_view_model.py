@@ -47,7 +47,7 @@ def test_last_column_is_not_stretched(qtbot: QtBot, app: TQManager):
     app.show()
     qtbot.wait_exposed(app)
     app.resize(2400, 300)
-    qtbot.wait(50)
+    qtbot.wait_until(lambda: view.viewport().width() > 2000)
 
     header = view.header()
     last = header.logicalIndex(header.count() - 1)

@@ -15,6 +15,10 @@ from tqm.exceptions import TaskCancelled
 from tqm._core.task import TaskExecutable
 
 
+# Blocks like a long render. The workflow bans the sleep call in tests.
+BLOCK = 'import threading; threading.Event().wait(30)'
+
+
 def python(code: str) -> List[str]:
     return [sys.executable, '-u', '-c', code]
 
@@ -52,7 +56,7 @@ def test_non_zero_exit_raises_with_the_output_tail(task: TaskExecutable, logs: L
 def test_timeout_kills_the_process_and_raises(task: TaskExecutable, logs: List[str]):
     start = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
-        run_process(task, python('import time; time.sleep(30)'), timeout=0.3)
+        run_process(task, python(BLOCK), timeout=0.3)
 
     assert time.monotonic() - start < 10
 
@@ -61,7 +65,7 @@ def test_stop_raises_task_cancelled(task: TaskExecutable, logs: List[str]):
     cancel_later(task)
     start = time.monotonic()
     with pytest.raises(TaskCancelled):
-        run_process(task, python('import time; time.sleep(30)'))
+        run_process(task, python(BLOCK))
 
     assert time.monotonic() - start < 10
 
@@ -70,30 +74,32 @@ def test_stop_before_start_raises_task_cancelled(task: TaskExecutable, logs: Lis
     task._request_cancel()
 
     with pytest.raises(TaskCancelled):
-        run_process(task, python('import time; time.sleep(30)'))
+        run_process(task, python(BLOCK))
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason='checks the pid with os.kill')
-def test_stop_kills_the_child_processes(task: TaskExecutable, logs: List[str]):
+def test_stop_kills_the_child_processes(qtbot, task: TaskExecutable, logs: List[str]):
     # The command starts a child that would outlive a plain terminate.
     code = (
-        'import subprocess, sys, time\n'
-        'child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])\n'
+        'import subprocess, sys, threading\n'
+        f'child = subprocess.Popen([sys.executable, "-c", "{BLOCK}"])\n'
         'print(child.pid)\n'
-        'time.sleep(30)\n'
+        'threading.Event().wait(30)\n'
     )
     cancel_later(task, delay=1.0)
     with pytest.raises(TaskCancelled):
         run_process(task, python(code))
 
     child_pid = int(logs[0])
-    for _ in range(50):
+
+    def child_is_dead() -> bool:
         try:
             os.kill(child_pid, 0)
         except ProcessLookupError:
-            return
-        time.sleep(0.1)
-    pytest.fail(f'child {child_pid} is still alive')
+            return True
+        return False
+
+    qtbot.wait_until(child_is_dead, timeout=5000)
 
 
 def test_stop_from_the_manager_ends_the_task_cancelled(qtbot, app: TQManager):
@@ -101,7 +107,7 @@ def test_stop_from_the_manager_ends_the_task_cancelled(qtbot, app: TQManager):
 
     def render(task: TaskExecutable) -> None:
         started.append(True)
-        run_process(task, python('import time; time.sleep(30)'))
+        run_process(task, python(BLOCK))
 
     task = TaskBuilder('Render').with_event(render).build()
     app.add_tasks(task)

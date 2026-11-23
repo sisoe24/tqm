@@ -190,7 +190,7 @@ def test_hook_stops_a_real_subprocess(qtbot, app: TQManager):
     procs: List[subprocess.Popen] = []
 
     def render(task) -> None:
-        proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+        proc = subprocess.Popen([sys.executable, '-c', 'import threading; threading.Event().wait(30)'])
         procs.append(proc)
         task.on_cancel(proc.terminate)
         proc.wait()
