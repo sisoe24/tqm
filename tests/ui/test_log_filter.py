@@ -121,3 +121,18 @@ def test_last_message_column_shows_the_latest_task_log(qtbot: QtBot, app: TQMana
 
     qtbot.wait_until(lambda: cell_data(view, 'A', 'Last message') == 'step two')
     qtbot.wait_until(lambda: cell_data(view, 'Child', 'Last message') == 'child step')
+
+
+def test_rerender_appends_only_the_lines_that_fit(logs: TasksLog, monkeypatch: pytest.MonkeyPatch):
+    panel = logs.findChild(QPlainTextEdit)
+    panel.setMaximumBlockCount(3)
+    for task_id in ('a', 'b'):
+        for i in range(4):
+            logs.log(line(f'{task_id}{i}'), task_id=task_id)
+
+    appended = []
+    monkeypatch.setattr(panel, 'appendHtml', appended.append)
+    logs.show_tasks([])
+
+    assert len(appended) == 3
+    assert 'b3' in appended[-1]

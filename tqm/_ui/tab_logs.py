@@ -151,7 +151,8 @@ class TasksLog(QWidget):
         ]
         self._logs.setUpdatesEnabled(False)
         self._logs.clear()
-        for _, line in heapq.merge(*buffers):
+        # Only the newest lines fit the panel; appending the rest is wasted work.
+        for _, line in deque(heapq.merge(*buffers), maxlen=self._logs.maximumBlockCount()):
             self._logs.appendHtml(line)
         self._logs.setUpdatesEnabled(True)
         self._scroll_to_end()
