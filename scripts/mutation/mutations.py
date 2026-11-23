@@ -26,6 +26,7 @@ MULTI_SELECT = 'tqm/_ui/mixins/multi_select_mixin.py'
 DEBUG_WIDGET = 'tqm/_ui/debug_widget.py'
 FONT_LOADER = 'tqm/_ui/font_loader.py'
 TASK_BASE = 'tqm/_core/task_base.py'
+RUN_PROCESS = 'tqm/utils/run_process.py'
 TASK = 'tqm/_core/task.py'
 
 
@@ -1559,5 +1560,53 @@ MUTANTS = [
         "menu.addAction('Stop selected').triggered.connect(self.selected_task_cancelled.emit)",
         'pass',
         'ui: no Stop in the menu',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        "popen_kwargs.setdefault('start_new_session', True)",
+        'pass',
+        'run_process: no own process group, so a stop kills nothing',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'task.on_cancel(on_cancel)',
+        'pass',
+        'run_process: a stop does not kill the process',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'if proc.returncode is None:\n            _stop_in_background(proc)',
+        'if False:\n            _stop_in_background(proc)',
+        'run_process: the cancel hook never kills',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'stderr=subprocess.STDOUT',
+        'stderr=None',
+        'run_process: stderr is not logged',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'tail.append(line)',
+        'pass',
+        'run_process: no output tail on errors',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        "if task.cancel_requested:\n        raise TaskCancelled(f'{task.name} stopped by user')",
+        'pass',
+        'run_process: a stop raises the exit code error',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'if timed_out:',
+        'if False:',
+        'run_process: a timeout raises the exit code error',
+    ),
+    Mutant(
+        RUN_PROCESS,
+        'if proc.returncode != 0:',
+        'if False:',
+        'run_process: a failed command passes',
     ),
 ]

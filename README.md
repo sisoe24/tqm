@@ -28,7 +28,7 @@ Basically, a Task Queue Manager.
   - Simple API for creating and queuing tasks
   - Callbacks for task lifecycle events (start, finish, fail, complete)
   - Predicates to control when tasks should run
-  - Stop running tasks: check `task.cancel_requested` in long loops, or register `task.on_cancel(proc.terminate)` for a subprocess
+  - Stop running tasks: check `task.cancel_requested` in long loops, or run commands with `tqm.utils.run_process`
   - Customizable task colors and more
   - Comprehensive typing annotations
 
@@ -152,6 +152,27 @@ task = TaskBuilder("Download").with_event(download).with_retry_policy(policy).bu
 
 A group does not retry: `TaskGroupBuilder.build()` raises `TaskGroupError` if the builder has a
 retry policy. Give the retry policy to the tasks in the group.
+
+### Stopping a task
+
+Right-click a task and pick Stop selected, or call `task_manager.cancel_tasks(task)`. Python threads
+cannot be killed, so the task callable must cooperate:
+
+```python
+from tqm.utils import run_process
+
+def render(task):
+    # Output goes to the task log. A stop or the timeout kills the whole process tree.
+    run_process(task, ["nuke", "-x", "comp.nk"], timeout=3600)
+
+def convert(task):
+    for frame in frames:
+        if task.cancel_requested:
+            return
+        convert_frame(frame)
+```
+
+For other blocking work, register a hook: `task.on_cancel(connection.close)`.
 
 ### Executor events
 
