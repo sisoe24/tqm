@@ -28,6 +28,7 @@ from PySide2.QtWidgets import QMainWindow, QMessageBox, QApplication
 
 from tqm import (TQManager, TaskBuilder, TaskExecutable, TaskGroupBuilder,
                  TaskActionVisibility)
+from tqm.utils import run_process
 
 
 class DemoTasks:
@@ -252,6 +253,35 @@ class DemoTasks:
         # Add groups to manager
         self.manager.add_tasks(main_group, parallel_group)
 
+    def add_stoppable_tasks(self):
+        """Add long tasks to try Stop selected on."""
+
+        def long_loop(task: TaskExecutable, steps: int = 120):
+            for i in range(steps):
+                if task.cancel_requested:
+                    return
+                task.emit_progress((i + 1) / steps * 100)
+                time.sleep(0.5)
+
+        render = (
+            'import time\n'
+            'for frame in range(1001, 1061):\n'
+            '    print(f"Rendering frame {frame}", flush=True)\n'
+            '    time.sleep(1)\n'
+        )
+
+        self.manager.add_event(
+            execute=long_loop,
+            show_progress=True,
+            label='Long Loop',
+            comment='Checks task.cancel_requested. Right-click > Stop selected'
+        )
+        self.manager.add_event(
+            execute=lambda t: run_process(t, [sys.executable, '-c', render]),
+            label='Fake Render',
+            comment='A 60s subprocess run with run_process. Right-click > Stop selected'
+        )
+
 
 def setup_manager() -> TQManager:
     """
@@ -277,6 +307,7 @@ def setup_manager() -> TQManager:
     demo_tasks.add_random_color_tasks()
     demo_tasks.add_task_with_callbacks()
     demo_tasks.add_complex_group()
+    demo_tasks.add_stoppable_tasks()
 
     # TQM_DEMO_NO_POPUP=1 skips the welcome box, for quick dev runs.
     if os.getenv('TQM_DEMO_NO_POPUP') == '1':
@@ -295,7 +326,8 @@ def setup_manager() -> TQManager:
         '• Task dependencies\n'
         '• Task colors\n'
         '• Complex nested groups\n'
-        '• Task lifecycle callbacks\n\n'
+        '• Task lifecycle callbacks\n'
+        '• Stopping long tasks and subprocesses\n\n'
         "Click 'Start Workers' to begin executing the tasks.\n"
         'You can interact with tasks by right-clicking on them.'
     )
