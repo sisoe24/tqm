@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The log panel opens at 70/30 on first launch and remembers its size. `DEV_MODE` no longer affects it.
 - Icons come from one set, Lucide (ISC license, in `resources/icons`). Unused icons are removed.
 
+### Fixed
+
+- The last column of the tree no longer stretches, so the tree scrolls to its end. A layout saved by an older version can still hold a squashed column: use Reset layout.
+
 ## v0.3.0
 
 ### Added
