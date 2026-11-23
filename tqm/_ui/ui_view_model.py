@@ -47,8 +47,8 @@ class TreeModel(QStandardItemModel):
         super().__init__(parent)
 
         self._headers = (
-            'Task', 'Progress', 'Wait for', 'Comment',
-            'Created', 'Started', 'Completed', 'Last message',
+            'Task', 'Progress', 'Wait for', 'Last message', 'Comment',
+            'Created', 'Started', 'Completed',
         )
 
         self.columns = {h: i for i, h in enumerate(self._headers)}
@@ -69,11 +69,11 @@ class TreeModel(QStandardItemModel):
             item,
             TaskItem('', has_progress=True),
             TaskItem(task.parent.name if task.parent else ''),
+            TaskItem(''),
             TaskItem(task.comment, is_editable=True),
             TaskItem(task.state.get_first().timestamp, alignment=Qt.AlignCenter),
             TaskItem('', alignment=Qt.AlignCenter),
             TaskItem('', alignment=Qt.AlignCenter),
-            TaskItem(''),
         ]
 
     def _configure_group_item(self, task_group: TaskGroup) -> None:
