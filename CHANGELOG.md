@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `TaskBuilder.with_event(event, cancellable=True)` marks a task whose callable stops when asked: it checks `task.cancel_requested`, uses `task.on_cancel`, or runs `tqm.utils.run_process`. It is set with the callable, like `show_progress`, because it is a promise about that callable.
+
+### Changed
+
+- Stop is opt-in per task, off by default. A running thread cannot be killed, so a task without `cancellable=True` cannot be stopped in any state: Stop selected is not offered for it, and `cancel_tasks()` leaves it alone and logs a warning. A group has no flag: it can be stopped only if all its tasks are cancellable.
+- The tasks that wait for a stopped task still end cancelled, cancellable or not, since they can never run. A running task that is not cancellable is never asked to stop.
+- Stop selected shows when at least one selected task can be stopped, and stops only those.
+
 ## v0.4.0 (2026-11-23)
 
 ### Added

@@ -15,6 +15,8 @@ TaskUnit = Union[TaskBase['TaskExecutable'], TaskBase['TaskGroup']]
 class TaskExecutable(TaskBase['TaskExecutable']):
     execute: Callable[..., Any] = lambda task: None
     group: Optional[TaskGroup] = None
+    # The callable checks `cancel_requested` or uses `on_cancel`, so Stop can end it.
+    cancellable: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__(suffix='Task')
@@ -48,6 +50,11 @@ class TaskGroup(TaskBase['TaskGroup']):
 
     def __hash__(self) -> int:
         return hash(self.id)
+
+    @property
+    def cancellable(self) -> bool:
+        """True if every member is cancellable. A group has no flag of its own."""
+        return all(task.cancellable for task in self.tasks)
 
     def add_tasks(self, *tasks: TaskExecutable) -> None:
         # Members are registered when the group starts, so a later member would never run.

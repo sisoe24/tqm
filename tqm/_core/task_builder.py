@@ -343,6 +343,7 @@ class TaskBuilder(_TaskBuilderBase['TaskBuilder', TaskExecutable]):
         super().__init__(name)
 
         self.event: Callable[[TaskExecutable], Any] = lambda task: None
+        self.cancellable = False
 
         # Progress bar options
         self.minimum = 0
@@ -353,20 +354,32 @@ class TaskBuilder(_TaskBuilderBase['TaskBuilder', TaskExecutable]):
         self,
         event: Callable[[TaskExecutable], Any],
         *,
-        show_progress: bool = False
+        show_progress: bool = False,
+        cancellable: bool = False
     ) -> TaskBuilder:
         """Set the event of the task.
 
         >>> with_event(lambda task: print(task.name))
         >>> with_event(show_progress_event, show_progress=True)
+        >>> with_event(render, cancellable=True)
 
-        NOTE:
-            - The first argument is the task itself.
-            - The event reports progress with `task.emit_progress(value)`
+        Args:
+            event: The callable to run. Its first argument is the task itself. It reports
+                progress with `task.emit_progress(value)`.
+            show_progress: If True, the progress bar shows the values the event emits.
+            cancellable: Set it to True only if the event stops when asked: it checks
+                `task.cancel_requested`, registers a hook with `task.on_cancel`, or runs
+                its commands with `tqm.utils.run_process`. A running thread cannot be
+                killed, so a task without it cannot be stopped in any state: Stop
+                selected is not offered for it and `cancel_tasks` leaves it alone. It is
+                set here, like `show_progress`, because it is a promise about `event`.
 
+        Returns:
+            The builder.
         """
         self.event = event
         self.show_progress = show_progress
+        self.cancellable = cancellable
         return self
 
     def with_min_max(self, minimum: int = 0, maximum: int = 100) -> TaskBuilder:
@@ -379,6 +392,7 @@ class TaskBuilder(_TaskBuilderBase['TaskBuilder', TaskExecutable]):
         return TaskExecutable(
             name=self.name,
             execute=self.event,
+            cancellable=self.cancellable,
             actions=tuple(self._actions),
             comment=self.comment,
             parent=self.parent,

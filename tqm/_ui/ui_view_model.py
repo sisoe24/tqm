@@ -233,6 +233,13 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
 
         return items
 
+    @staticmethod
+    def _is_stoppable(task: TaskUnit) -> bool:
+        state = task.state
+        return task.cancellable and (
+            state.is_running or state.is_waiting or state.is_blocked or state.is_retrying
+        )
+
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         def add_actions(actions: _TaskActionsT, visibility: TaskActionVisibility) -> None:
             for action in filter(lambda a: a.visibility == visibility, actions):
@@ -268,8 +275,7 @@ class TaskTreeView(MultiSelectMixin, ViewStateMixing, QTreeView):
 
         menu.addSeparator()
 
-        state = task.state
-        if state.is_running or state.is_waiting or state.is_blocked or state.is_retrying:
+        if any(self._is_stoppable(selected.data(Qt.UserRole)) for selected in self.get_selected_items()):
             menu.addAction('Stop selected').triggered.connect(self.selected_task_cancelled.emit)
 
         if task.state.is_removable:

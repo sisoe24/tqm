@@ -109,7 +109,7 @@ def test_stop_from_the_manager_ends_the_task_cancelled(qtbot, app: TQManager):
         started.append(True)
         run_process(task, python(BLOCK))
 
-    task = TaskBuilder('Render').with_event(render).build()
+    task = TaskBuilder('Render').with_event(render, cancellable=True).build()
     app.add_tasks(task)
     app.start_workers()
     qtbot.wait_until(lambda: bool(started), timeout=5000)

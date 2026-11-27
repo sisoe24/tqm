@@ -113,11 +113,16 @@ class TQManager(QMainWindow):
             self.executor.remove_task(task)
 
     def cancel_tasks(self, *tasks: TaskUnit) -> None:
-        """Stop tasks. Tasks that have not started end cancelled at once.
+        """Stop cancellable tasks. Tasks that have not started end cancelled at once.
 
         A running task cannot be killed: its callable must check `task.cancel_requested`
         or register a hook with `task.on_cancel`, for example to stop a subprocess.
-        Until it returns, the task stays running.
+        Until it returns, the task stays running. So only a task built with
+        `with_event(..., cancellable=True)`, or a group whose members all are, can be
+        stopped. Other tasks are left as they are and a warning is logged.
+
+        Args:
+            *tasks: The tasks or groups to stop.
         """
         for task in tasks:
             self.executor.cancel_task(task)

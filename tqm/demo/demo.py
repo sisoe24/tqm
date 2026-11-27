@@ -270,16 +270,15 @@ class DemoTasks:
             '    time.sleep(1)\n'
         )
 
-        self.manager.add_event(
-            execute=long_loop,
-            show_progress=True,
-            label='Long Loop',
-            comment='Checks task.cancel_requested. Right-click > Stop selected'
-        )
-        self.manager.add_event(
-            execute=lambda t: run_process(t, [sys.executable, '-c', render]),
-            label='Fake Render',
-            comment='A 60s subprocess run with run_process. Right-click > Stop selected'
+        self.manager.add_tasks(
+            TaskBuilder('Long Loop')
+            .with_event(long_loop, show_progress=True, cancellable=True)
+            .with_comment('Checks task.cancel_requested. Right-click > Stop selected')
+            .build(),
+            TaskBuilder('Fake Render')
+            .with_event(lambda t: run_process(t, [sys.executable, '-c', render]), cancellable=True)
+            .with_comment('A 60s subprocess run with run_process. Right-click > Stop selected')
+            .build(),
         )
 
 
