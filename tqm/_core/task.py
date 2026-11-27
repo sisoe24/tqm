@@ -70,6 +70,7 @@ class TaskGroup(TaskBase['TaskGroup']):
         execute: Callable[[TaskExecutable], Any],
         *,
         show_progress: bool = False,
+        cancellable: bool = False,
         label: str = '',
         comment: str = ''
     ) -> TaskExecutable:
@@ -78,6 +79,10 @@ class TaskGroup(TaskBase['TaskGroup']):
         Args:
             execute (Callable[..., Any]): The event to be executed. The first argument is the task itself.
             show_progress (bool): If the task should show a progress.
+            cancellable (bool): Set it to True only if the event stops when asked: it
+                checks `task.cancel_requested`, registers a hook with `task.on_cancel`,
+                or runs its commands with `tqm.utils.run_process`. Without it, the task
+                cannot be stopped in any state. See `TaskBuilder.with_event`.
             label (Optional[str], optional): The label of the task. If not provided,
                 a default label will be generated.
             comment (str, optional): Comment of the task. Defaults to ''.
@@ -95,7 +100,7 @@ class TaskGroup(TaskBase['TaskGroup']):
         from .task_builder import TaskBuilder
         task = (
             TaskBuilder(name=label)
-            .with_event(execute, show_progress=show_progress)
+            .with_event(execute, show_progress=show_progress, cancellable=cancellable)
             .with_comment(comment)
             .build()
         )

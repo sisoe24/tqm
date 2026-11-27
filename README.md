@@ -160,6 +160,8 @@ Say so when you set the callable, with `cancellable=True`:
 
 ```python
 task = TaskBuilder("Render").with_event(render, cancellable=True).build()
+# or
+task = task_manager.add_event(render, cancellable=True)
 ```
 
 Then right-click it and pick Stop selected, or call `task_manager.cancel_tasks(task)`. A task

@@ -347,3 +347,44 @@ def test_running_dependant_that_is_not_cancellable_is_not_stopped(executor: Task
     assert not child.cancel_requested
     step_pool.drain()
     assert child.state.is_completed
+
+
+def test_manager_add_event_takes_the_cancellable_flag(make_manager):
+    manager: TQManager = make_manager('cancel')
+    plain = manager.add_event(lambda t: None, label='Plain')
+    task = manager.add_event(lambda t: None, label='Stoppable', cancellable=True)
+    assert plain.state.is_waiting and task.state.is_waiting  # workers not started
+
+    manager.cancel_tasks(plain, task)
+
+    assert plain.state.is_waiting
+    assert task.state.is_cancelled
+
+
+def test_group_add_event_takes_the_cancellable_flag(executor: TaskExecutor, step_pool: StepPool):
+    group = TaskGroupBuilder('G').build()
+    plain = group.add_event(lambda t: None, label='Plain')
+    task = group.add_event(lambda t: None, label='Stoppable', cancellable=True)
+    assert task.cancellable and not plain.cancellable
+    assert not group.cancellable  # mixed members
+    start(executor, group)
+
+    executor.cancel_task(plain)
+    executor.cancel_task(task)
+    step_pool.drain()
+
+    assert plain.state.is_completed
+    assert task.state.is_cancelled
+
+
+def test_group_of_add_event_members_that_all_opt_in_is_cancellable(executor: TaskExecutor, step_pool: StepPool):
+    group = TaskGroupBuilder('G').build()
+    members = [group.add_event(lambda t: None, cancellable=True) for _ in range(2)]
+    assert group.cancellable
+    start(executor, group)
+
+    executor.cancel_task(group)
+    step_pool.drain()
+
+    assert group.state.is_cancelled
+    assert all(member.state.is_cancelled for member in members)

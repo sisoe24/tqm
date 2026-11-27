@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `TaskBuilder.with_event(event, cancellable=True)` marks a task whose callable stops when asked: it checks `task.cancel_requested`, uses `task.on_cancel`, or runs `tqm.utils.run_process`. It is set with the callable, like `show_progress`, because it is a promise about that callable.
+- `TaskBuilder.with_event(event, cancellable=True)` marks a task whose callable stops when asked: it checks `task.cancel_requested`, uses `task.on_cancel`, or runs `tqm.utils.run_process`. It is set with the callable, like `show_progress`, because it is a promise about that callable. `TQManager.add_event` and `TaskGroup.add_event` take the same `cancellable` argument.
 
 ### Changed
 
