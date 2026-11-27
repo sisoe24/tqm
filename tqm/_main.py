@@ -113,11 +113,16 @@ class TQManager(QMainWindow):
             self.executor.remove_task(task)
 
     def cancel_tasks(self, *tasks: TaskUnit) -> None:
-        """Stop tasks. Tasks that have not started end cancelled at once.
+        """Stop cancellable tasks. Tasks that have not started end cancelled at once.
 
         A running task cannot be killed: its callable must check `task.cancel_requested`
         or register a hook with `task.on_cancel`, for example to stop a subprocess.
-        Until it returns, the task stays running.
+        Until it returns, the task stays running. So only a task built with
+        `with_event(..., cancellable=True)`, or a group whose members all are, can be
+        stopped. Other tasks are left as they are and a warning is logged.
+
+        Args:
+            *tasks: The tasks or groups to stop.
         """
         for task in tasks:
             self.executor.cancel_task(task)
@@ -153,6 +158,7 @@ class TQManager(QMainWindow):
         execute: Callable[[TaskExecutable], Any],
         *,
         show_progress: bool = False,
+        cancellable: bool = False,
         label: str = '',
         comment: str = ''
     ) -> TaskExecutable:
@@ -162,6 +168,10 @@ class TQManager(QMainWindow):
             execute (Callable[[Task], Any]): The event to be executed. The first argument
             is the task itself.
             show_progress (bool): If the task should show a progress.
+            cancellable (bool): Set it to True only if the event stops when asked: it
+                checks `task.cancel_requested`, registers a hook with `task.on_cancel`,
+                or runs its commands with `tqm.utils.run_process`. Without it, the task
+                cannot be stopped in any state. See `TaskBuilder.with_event`.
             label (Optional[str], optional): The label of the task. If not provided,
                 a default label will be generated.
             comment (str, optional): Comment of the task. Defaults to ''.
@@ -177,7 +187,7 @@ class TQManager(QMainWindow):
         """
         task = (
             TaskBuilder(name=label)
-            .with_event(execute, show_progress=show_progress)
+            .with_event(execute, show_progress=show_progress, cancellable=cancellable)
             .with_comment(comment)
             .build()
         )

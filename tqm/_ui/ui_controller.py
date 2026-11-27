@@ -241,7 +241,7 @@ class TaskManagerController(QObject):
         for task in self.get_selected_tasks():
             self._executor.cancel_task(task)
             # The task stays running until its callable returns.
-            if task.state.is_running:
+            if task.state.is_running and task.cancel_requested:
                 self._update_item_data(task, 'Last message', 'Stopping...')
 
     @Slot()

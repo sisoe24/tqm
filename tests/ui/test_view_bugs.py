@@ -26,7 +26,7 @@ from tqm._ui.ui_view_model import TaskTreeView
 from tqm._ui.progress_bar_delegate import ProgressBarRenderer
 
 from ..utils import run_events, must_not_raise
-from .test_ui_controller import find_row, cell_data
+from .test_ui_controller import find_row, cell_data, select_task
 
 
 def noop_task(name: str = '') -> TaskBuilder:
@@ -639,7 +639,7 @@ def test_view_button_holds_the_panel_toggles(app: TQManager):
 
 def test_context_stop_then_retry(qtbot: QtBot, app: TQManager, view: TaskTreeView, gate: Callable[[], Event]):
     release = gate()
-    task = TaskBuilder('Aaa').with_event(lambda t: release.wait(5)).build()
+    task = TaskBuilder('Aaa').with_event(lambda t: release.wait(5), cancellable=True).build()
     app.add_tasks(task)
     app.start_workers()
     qtbot.wait_until(lambda: task.state.is_running)
@@ -651,3 +651,39 @@ def test_context_stop_then_retry(qtbot: QtBot, app: TQManager, view: TaskTreeVie
     labels = open_context_menu(view, 'Aaa', 'Retry')
     assert 'Stop selected' not in labels
     qtbot.wait_until(lambda: task.state.is_completed)
+
+
+def test_stop_selected_is_not_offered_for_a_task_that_is_not_cancellable(
+    qtbot: QtBot, app: TQManager, view: TaskTreeView, gate: Callable[[], Event]
+):
+    release = gate()
+    task = TaskBuilder('Aaa').with_event(lambda t: release.wait(5)).build()
+    app.add_tasks(task)
+    app.start_workers()
+    qtbot.wait_until(lambda: task.state.is_running)
+
+    assert open_context_menu(view, 'Aaa') is None  # Stop selected was its only item
+    release.set()
+    qtbot.wait_until(lambda: task.state.is_completed)
+
+
+def test_stop_selected_stops_only_the_cancellable_tasks_of_the_selection(
+    qtbot: QtBot, app: TQManager, view: TaskTreeView, gate: Callable[[], Event]
+):
+    release = gate()
+    plain = TaskBuilder('Aaa').with_event(lambda t: release.wait(5)).build()
+    stoppable = TaskBuilder('Bbb').with_event(lambda t: release.wait(5), cancellable=True).build()
+    app.add_tasks(plain, stoppable)
+    app.start_workers()
+    qtbot.wait_until(lambda: plain.state.is_running and stoppable.state.is_running)
+    select_task(view, 'Aaa')
+    select_task(view, 'Bbb')
+
+    # Offered from the plain row too, since the selection holds a cancellable task.
+    assert 'Stop selected' in open_context_menu(view, 'Aaa', 'Stop selected')
+
+    assert stoppable.cancel_requested
+    assert not plain.cancel_requested
+    assert cell_data(view, 'Aaa', 'Last message') != 'Stopping...'
+    release.set()
+    qtbot.wait_until(lambda: stoppable.state.is_cancelled and plain.state.is_completed)

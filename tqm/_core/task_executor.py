@@ -473,13 +473,35 @@ class TaskExecutor(QObject):
     def cancel_task(self, task: TaskUnit) -> None:
         """Stop a task, its group members and the tasks that wait for it.
 
+        Only a cancellable task can be stopped: one built with
+        `with_event(..., cancellable=True)`, or a group whose members all are. Any
+        other task is left as it is, in any state, and a warning is logged.
+
         A task that has not started ends cancelled now. A running task gets
         `cancel_requested` and its `on_cancel` hooks run; it ends cancelled when its
         callable returns. Finished tasks are left as they are.
+
+        The tasks that wait for a cancelled task can never run, so they end cancelled
+        too, cancellable or not. A running task that is not cancellable is never
+        asked to stop: it finishes on its own.
+
+        Args:
+            task: The task or group to stop.
+
+        Raises:
+            TaskError: If called from a thread other than the one that created the executor.
         """
         self._check_thread()
+        if not task.cancellable:
+            LOGGER.warning(f'{task.name} is not cancellable: not stopped', extra={'tqm_task': str(task.id)})
+            return
+        self._cancel(task)
+
+    def _cancel(self, task: TaskUnit) -> None:
         state = task.state
         if not (state.is_running or state.is_waiting or state.is_blocked or state.is_retrying):
+            return
+        if state.is_running and not task.cancellable:
             return
         if not task._request_cancel():
             return
@@ -491,7 +513,7 @@ class TaskExecutor(QObject):
         LOGGER.info(f'{task.name} stop requested', extra={'tqm_task': str(task.id)})
         if isinstance(task, TaskGroup):
             for member in list(task.tasks):
-                self.cancel_task(member)
+                self._cancel(member)
 
     def _finish_cancelled(self, task: TaskUnit) -> None:
         """End a task cancelled, and every child still waiting for it."""
@@ -507,7 +529,7 @@ class TaskExecutor(QObject):
         self.callbacks.runner_cancelled.emit(task)
 
         for child in task.children.copy():
-            self.cancel_task(child)
+            self._cancel(child)
 
         self._settle_group(getattr(task, 'group', None))
 

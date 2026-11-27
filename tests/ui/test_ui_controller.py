@@ -442,7 +442,7 @@ def test_clear_completed_reaches_group_members(qtbot: QtBot, app: TQManager):
 
 def test_stop_selected_cancels_and_shows_stopping(qtbot: QtBot, app: TQManager, gate):
     release = gate()
-    task = TaskBuilder('Running').with_event(lambda t: release.wait(5)).build()
+    task = TaskBuilder('Running').with_event(lambda t: release.wait(5), cancellable=True).build()
     app.add_tasks(task)
     app.start_workers()
     qtbot.wait_until(lambda: task.state.is_running)

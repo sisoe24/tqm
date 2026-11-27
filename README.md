@@ -28,7 +28,7 @@ Basically, a Task Queue Manager.
   - Simple API for creating and queuing tasks
   - Callbacks for task lifecycle events (start, finish, fail, complete)
   - Predicates to control when tasks should run
-  - Stop running tasks: check `task.cancel_requested` in long loops, or run commands with `tqm.utils.run_process`
+  - Stop tasks that opt in: check `task.cancel_requested` in long loops, or run commands with `tqm.utils.run_process`
   - Customizable task colors and more
   - Comprehensive typing annotations
 
@@ -155,8 +155,24 @@ retry policy. Give the retry policy to the tasks in the group.
 
 ### Stopping a task
 
-Right-click a task and pick Stop selected, or call `task_manager.cancel_tasks(task)`. Python threads
-cannot be killed, so the task callable must cooperate:
+Python threads cannot be killed, so only a task whose callable stops when asked can be stopped.
+Say so when you set the callable, with `cancellable=True`:
+
+```python
+task = TaskBuilder("Render").with_event(render, cancellable=True).build()
+# or
+task = task_manager.add_event(render, cancellable=True)
+```
+
+Then right-click it and pick Stop selected, or call `task_manager.cancel_tasks(task)`. A task
+without `cancellable=True` cannot be stopped in any state: Stop selected is not offered for it,
+and `cancel_tasks` leaves it alone and logs a warning. A group has no flag: it can be stopped only
+if all its tasks are cancellable.
+
+The tasks that wait for a stopped task end cancelled too, cancellable or not, since they can never
+run. A running task that is not cancellable is never asked to stop: it finishes on its own.
+
+The callable cooperates like this:
 
 ```python
 from tqm.utils import run_process

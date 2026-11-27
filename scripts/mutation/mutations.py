@@ -1469,7 +1469,7 @@ MUTANTS = [
         EXECUTOR,
         (
             'for member in list(task.tasks):\n'
-            '                self.cancel_task(member)'
+            '                self._cancel(member)'
         ),
         'pass',
         'cancel: group members keep running',
@@ -1478,7 +1478,7 @@ MUTANTS = [
         EXECUTOR,
         (
             'for child in task.children.copy():\n'
-            '            self.cancel_task(child)'
+            '            self._cancel(child)'
         ),
         'pass',
         'cancel: children stay blocked',
